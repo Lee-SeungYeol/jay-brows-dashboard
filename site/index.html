@@ -279,7 +279,8 @@ function threadsOf(p) {
   });
   return out;
 }
-let thMap = new Map(), cf = store.get("cf", "all"), cShown = 100, openTh = null;
+const C_PAGE = 30;  // 최근 댓글: 한 번에 보여줄 대화 수
+let thMap = new Map(), cf = store.get("cf", "all"), cShown = C_PAGE, openTh = null;
 if (!["all", "wait", "done"].includes(cf)) cf = "all";
 function indexThreads() {
   thMap = new Map();
@@ -581,8 +582,8 @@ document.addEventListener("click", e => {
   if (st) { st.classList.toggle("show"); return; }
   if (e.target.closest("[data-cmx]") || e.target.id === "cm") { closeTh(); return; }
   const cb = e.target.closest("button[data-cf]");
-  if (cb) { cf = cb.dataset.cf; cShown = 100; store.set("cf", cf); thList(); return; }
-  if (e.target.closest("button[data-cmore]")) { cShown += 100; thList(); return; }
+  if (cb) { cf = cb.dataset.cf; cShown = C_PAGE; store.set("cf", cf); thList(); return; }
+  if (e.target.closest("button[data-cmore]")) { cShown += C_PAGE; thList(); return; }
   const th = e.target.closest("[data-th]");
   if (th) { showTh(th.dataset.th); return; }
   if (e.target.closest("button[data-more]")) { shown += PAGE; renderList(); return; }
