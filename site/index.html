@@ -645,7 +645,7 @@ function render() {
 
 /* ---------- 최근 1시간 조회수 급상승 TOP 10 (instagram.top_growth: 최근 60분 동안의 조회수 증가량) ---------- */
 const LV = {"강함": "s", "보통": "m", "약함": "w"};
-const TG_TIP = "순위 = 최근 1시간 동안 늘어난 조회수 순(3분마다 다시 계산).<br>강함 = 누적 반응(좋아요+댓글+공유+저장) 1,000 이상 · 보통 = 500~999 · 약함 = 500 미만.";
+const TG_TIP = "순위 = 최근 1시간 동안 늘어난 조회수 순(3분마다 다시 계산).<br>강함 = 1시간에 조회수 1,000 이상 증가 · 보통 = 500~999 · 약함 = 500 미만.<br><small>(1시간이 안 쌓였으면 지금까지 속도를 1시간 기준으로 환산)</small>";
 function topGrowthHTML(d) {
   const rows = d.top_growth || [], m = d.top_growth_meta || {};
   const wm = m.window_min != null ? Math.round(m.window_min) : null;
@@ -662,7 +662,7 @@ function topGrowthHTML(d) {
       ${r.image ? `<img loading="lazy" src="${esc(r.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}
       <span class="mn"><span class="l1"><b class="tb">${r.kind === "REELS" ? "릴스" : "게시물"}</b><span>${esc(r.text) || "(내용 없음)"}</span></span>
         <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)} · ${tag}</span></span></span>
-      <span class="lvw">${r.reactions != null ? `<small class="rx">반응 ${num(r.reactions)}</small>` : ""}<span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></span></a>`).join("") + `</div>`;
+      <span class="lvw">${r.per_hour != null ? `<small class="rx">시간당 +${num(Math.round(r.per_hour))} 조회</small>` : ""}<span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></span></a>`).join("") + `</div>`;
 }
 
 /* ---------- 댓글 많이 단 계정 TOP 10 (모든 게시물·릴스의 댓글+답글을 계정별로 집계, 내 계정 제외) ---------- */

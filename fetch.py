@@ -17,7 +17,7 @@ API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
 TOKEN = os.environ.get("META_TOKEN", "").strip()
 POST_LIMIT = int(os.environ.get("POST_LIMIT", "25"))
 COMMENT_LIMIT = int(os.environ.get("COMMENT_LIMIT", "300"))
-LEVEL_STRONG, LEVEL_MID = 1000, 500  # 조회수 급상승 level by cumulative reactions (likes+comments+shares+saved)
+LEVEL_STRONG, LEVEL_MID = 1000, 500  # 조회수 급상승 level by views gained per hour (강함 ≥ 1000, 보통 ≥ 500)
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "data.json")
 
 errors = []
@@ -437,9 +437,9 @@ def ig_growth(posts, views, last, now):
     grow = sorted(r["dv"] for r in rows if r["dv"] > 0)
     n = len(grow)
 
-    def reactions(p):
-        ins = p.get("insights") or {}
-        return sum(int(x or 0) for x in (p.get("likes"), p.get("comments_count"), ins.get("shares"), ins.get("saved")))
+    def per_hour(dv):
+        # window shorter than ~1h (still collecting): scale the pace so far to one hour
+        return dv if not mins or mins >= 55 else round(dv * 60 / mins, 1)
 
     def level(n):
         return "강함" if n >= LEVEL_STRONG else "보통" if n >= LEVEL_MID else "약함"
@@ -449,7 +449,7 @@ def ig_growth(posts, views, last, now):
         "id": r["p"]["id"], "kind": r["p"]["kind"], "type": r["p"]["type"],
         "text": (r["p"].get("text") or "")[:80], "url": r["p"]["url"], "image": r["p"]["image"],
         "time": r["p"]["time"], "views": r["views"], "views_prev": r["views_prev"], "dv": r["dv"],
-        "rate": r["rate"], "reactions": reactions(r["p"]), "level": level(reactions(r["p"])),
+        "rate": r["rate"], "per_hour": per_hour(r["dv"]), "level": level(per_hour(r["dv"])),
     } for r in top]
     median = None
     if n:
