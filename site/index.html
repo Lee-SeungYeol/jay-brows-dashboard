@@ -92,6 +92,19 @@ td.t{color:var(--muted);white-space:nowrap;font-size:12px}
 .tag .bdg{background:var(--line);color:var(--text);backdrop-filter:none}
 td{overflow-wrap:anywhere}
 @media (max-width:600px){td.u,td.t{white-space:normal}td.u{max-width:34vw}}
+.fchart{position:relative;padding:12px 10px 8px}
+.fchart svg{display:block;width:100%;height:auto;overflow:visible}
+.fchart .ax{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.fchart .gl{stroke:var(--line);stroke-width:1}
+.fchart .zl{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;opacity:.8}
+.fchart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.fchart .pt{fill:var(--card);stroke:var(--accent);stroke-width:2}
+.fchart .pt.on{fill:var(--accent)}
+.fchart .hit{fill:transparent;cursor:pointer}
+.fchart .vl{stroke:var(--accent);stroke-width:1;opacity:.35}
+.fchart .ctip{position:absolute;top:8px;z-index:4;pointer-events:none;background:var(--text);color:var(--bg);padding:7px 10px;border-radius:9px;font-size:12.5px;line-height:1.45;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.2);font-variant-numeric:tabular-nums}
+.fchart .ctip small{opacity:.75}
+.fchart .msg{color:var(--muted);text-align:center;padding:30px 10px;font-size:14px}
 .more{display:block;margin:16px auto 0;font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 22px;border-radius:999px;cursor:pointer}
 </style>
 </head>
@@ -263,7 +276,12 @@ function render() {
   const t = d.today || {};
   const b = isIG ? baseline(d.follower_history) : null, y = d.yesterday || {};
   const yd = k => y[k] != null ? `어제 하루 전체: ${num(y[k])}` : "";
-  const r25 = posts.slice(0, 25), rl = r25.reduce((a, p) => a + (p.likes || 0), 0), rc = r25.reduce((a, p) => a + (p.comments_count || 0), 0);
+  const T = d.totals || {}, tp = T.posts || 0, cov = T.insights_coverage ?? tp;
+  const covNote = tp && cov < tp ? `인사이트 수집된 ${num(cov)}/${num(tp)}개 게시물 기준 (곧 전체로 채워져요)` : "";
+  const r1 = x => x == null || !isFinite(x) ? "–" : (Math.round(x * 10) / 10).toLocaleString("ko-KR");
+  const aL = tp ? (T.likes || 0) / tp : null, aC = tp ? (T.comments || 0) / tp : null;
+  const aS = cov ? (T.shares || 0) / cov : null, aV = cov ? (T.saves || 0) / cov : null;
+  const avg = aL == null ? null : Math.round(aL + aC + (aS || 0) + (aV || 0));
   let h = (isIG ? `<div class="grid">` +
       stat("오늘 도달", t.reach, "오늘 내 게시물·릴스·스토리·프로필을 한 번이라도 본 계정 수예요. 한 사람이 여러 번 봐도 1명으로 세요.", b, "reach", yd("reach")) +
       stat("오늘 조회", t.views, "오늘 콘텐츠가 화면에 표시되거나 재생된 총 횟수예요. 같은 사람이 여러 번 보면 모두 셉니다.", b, "views", yd("views")) +
@@ -273,15 +291,18 @@ function render() {
     `<div class="grid">` +
     (isIG
       ? stat("팔로워", d.followers, "나를 팔로우하는 계정 수예요.", b, "followers") +
-        stat("게시물", d.media_count, "프로필에 올라간 전체 게시물 수(피드+릴스)예요.", b, "media")
-      : stat("팔로워", d.followers) + stat("페이지 좋아요", d.fans)) +
-    (isIG
-      ? stat("최근 25개 좋아요", rl, "가장 최근 피드 게시물 25개의 좋아요 합계예요.", b, "r_likes") +
-        stat("최근 25개 댓글", rc, "가장 최근 피드 게시물 25개의 댓글 합계(답글 포함)예요.", b, "r_comments") +
-        stat("게시물당 평균 반응", r25.length ? Math.round((rl + rc) / r25.length) : null, "최근 25개 게시물의 (좋아요+댓글) ÷ 25 예요. 높을수록 게시물 하나가 받는 반응이 커요.")
-      : stat(`최근 ${posts.length}개 좋아요`, likes) + stat(`최근 ${posts.length}개 댓글`, cmts) +
+        stat("전체 좋아요", T.likes, `지금까지 올린 모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}가 받은 좋아요 합계예요.`, b, "likes") +
+        stat("전체 댓글", T.comments, `모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}에 달린 댓글 합계(답글 포함)예요.`, b, "comments") +
+        stat("전체 공유", T.shares, "모든 게시물·릴스가 DM·스토리 등으로 공유된 횟수 합계예요.", b, "shares", covNote) +
+        stat("전체 저장", T.saves, "모든 게시물·릴스를 사람들이 저장(북마크)한 횟수 합계예요.", b, "saves", covNote) +
+        stat("게시물당 평균 반응", avg,
+          `게시물 하나가 평균적으로 받는 반응(좋아요+댓글+공유+저장)이에요.<br>평균 좋아요 ${r1(aL)} · 댓글 ${r1(aC)} · 공유 ${r1(aS)} · 저장 ${r1(aV)}` +
+          `<br><small>계산: (좋아요+댓글) ÷ 전체 게시물 수 + (공유+저장) ÷ 인사이트 수집 게시물 수. 공유·저장은 인사이트를 가져온 게시물에서만 합산되므로, 전체 게시물 수로 나누면 실제보다 작게 나와서 수집된 게시물 수로 나눠요.</small>`)
+      : stat("팔로워", d.followers) + stat("페이지 좋아요", d.fans) +
+        stat(`최근 ${posts.length}개 좋아요`, likes) + stat(`최근 ${posts.length}개 댓글`, cmts) +
         stat("게시물당 평균 반응", posts.length ? Math.round((likes + cmts) / posts.length) : null)) +
     `</div>`;
+  if (isIG) h += `<h2>시간당 팔로워 증감</h2><div class="card fchart" id="fchart"></div>`;
 
   const all = all_posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
     .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 100);
@@ -304,12 +325,95 @@ function render() {
   }
   v.innerHTML = h;
   if (isIG) {
+    drawChart();
     renderList();
     if (focusQ) { const el = document.getElementById("igq"); el.focus(); try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} }
   }
 }
 
+/* ---------- 시간당 팔로워 증감 차트 ---------- */
+const kstH = new Intl.DateTimeFormat("ko-KR", {timeZone: "Asia/Seoul", hour: "numeric", hourCycle: "h23"});
+const kstDH = new Intl.DateTimeFormat("ko-KR", {timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "numeric", hourCycle: "h23"});
+const sgn = n => (n > 0 ? "+" : n < 0 ? "−" : "±") + num(Math.abs(n));
+let chartPts = [], chartSel = null;   // chartSel: 선택된 점의 시각(t) — 새로고침 후에도 유지
+function drawChart() {
+  const box = document.getElementById("fchart");
+  if (!box || !data || !data.instagram) return;
+  const rows = (data.instagram.follower_history || []).filter(r => r.followers != null && !isNaN(Date.parse(r.t)));
+  const end = rows.length ? Date.parse(rows[rows.length - 1].t) : 0, from = end - 48 * 36e5;
+  const pts = [];
+  for (let i = 1; i < rows.length; i++) {
+    const ts = Date.parse(rows[i].t);
+    if (ts < from) continue;
+    pts.push({t: rows[i].t, ts, f: rows[i].followers, d: rows[i].followers - rows[i - 1].followers});
+  }
+  chartPts = pts;
+  if (pts.length < 2) { box.innerHTML = `<div class="msg">데이터 수집 중 — 1시간마다 한 점씩 쌓입니다</div>`; return; }
+  const W = Math.max(280, box.clientWidth - 20), H = W < 480 ? 200 : 240;
+  const L = 40, R = 10, TP = 12, B = 26, pw = W - L - R, ph = H - TP - B;
+  const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts, span = Math.max(1, t1 - t0);
+  let lo = Math.min(0, ...pts.map(p => p.d)), hi = Math.max(0, ...pts.map(p => p.d));
+  if (lo === hi) { hi += 1; lo -= 1; }
+  const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = Math.max(1, [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw));
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const X = ts => L + (ts - t0) / span * pw, Y = v => TP + (hi - v) / (hi - lo) * ph;
+  let g = "";
+  for (let v = lo; v <= hi + 1e-9; v += step)
+    g += `<line class="${v === 0 ? "zl" : "gl"}" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v > 0 ? "+" : ""}${num(v)}</text>`;
+  if (lo > 0 || hi < 0) g += `<line class="zl" x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+  // x축 라벨: 화면 폭에 맞춰 간격 조절 (정시 기준)
+  const maxLab = Math.max(2, Math.floor(pw / 46)), hrs = span / 36e5;
+  const every = [1, 2, 3, 4, 6, 12, 24].find(n => hrs / n <= maxLab) || 24;
+  const hourOf = ts => Number(kstH.format(new Date(ts)).replace(/\D/g, ""));
+  let lastLab = -Infinity;
+  for (const p of pts) {
+    const hh = hourOf(p.ts);
+    if (hh % every || p.ts - lastLab < every * 36e5 * 0.9) continue;
+    lastLab = p.ts;
+    g += `<text class="ax" x="${X(p.ts)}" y="${H - 6}" text-anchor="middle">${hh}시</text>`;
+  }
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(p.ts).toFixed(1)},${Y(p.d).toFixed(1)}`).join("");
+  const r = pts.length > 60 ? 2.5 : 3.5;
+  let dots = "", hits = "";
+  pts.forEach((p, i) => {
+    const x = X(p.ts), xl = i ? (x + X(pts[i - 1].ts)) / 2 : L, xr = i < pts.length - 1 ? (x + X(pts[i + 1].ts)) / 2 : W - R;
+    dots += `<circle class="pt" data-i="${i}" cx="${x}" cy="${Y(p.d)}" r="${r}"/>`;
+    hits += `<rect class="hit" data-pi="${i}" x="${xl}" y="${TP}" width="${Math.max(1, xr - xl)}" height="${ph}"/>`;
+  });
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="최근 48시간 시간당 팔로워 증감">${g}<line class="vl" id="fvl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/><path class="ln" d="${line}"/>${dots}${hits}</svg><div class="ctip" style="display:none"></div>`;
+  box._geo = {X, Y, W, L};
+  const si = pts.findIndex(p => p.t === chartSel);
+  if (si >= 0) selPoint(si); else chartSel = null;
+}
+function selPoint(i) {
+  const box = document.getElementById("fchart"), p = chartPts[i];
+  if (!box || !p || !box._geo) return;
+  chartSel = p.t;
+  const {X, W} = box._geo, x = X(p.ts);
+  box.querySelectorAll(".pt").forEach(c => c.classList.toggle("on", +c.dataset.i === i));
+  const vl = box.querySelector("#fvl"); vl.setAttribute("x1", x); vl.setAttribute("x2", x); vl.style.display = "";
+  const tip = box.querySelector(".ctip");
+  tip.innerHTML = `${kstDH.format(new Date(p.ts))}<br>증감 <b>${sgn(p.d)}</b><br><small>팔로워 ${num(p.f)}명</small>`;
+  tip.style.display = "block";
+  const scale = box.querySelector("svg").getBoundingClientRect().width / W || 1, px = 10 + x * scale, tw = tip.offsetWidth;
+  tip.style.left = Math.min(Math.max(4, px - tw / 2), box.clientWidth - tw - 4) + "px";
+}
+function clearPoint() {
+  const box = document.getElementById("fchart"); chartSel = null;
+  if (!box) return;
+  box.querySelectorAll(".pt.on").forEach(c => c.classList.remove("on"));
+  const vl = box.querySelector("#fvl"), tip = box.querySelector(".ctip");
+  if (vl) vl.style.display = "none"; if (tip) tip.style.display = "none";
+}
+document.addEventListener("mouseover", e => { const h = e.target.closest && e.target.closest("#fchart [data-pi]"); if (h) selPoint(+h.dataset.pi); });
+document.addEventListener("mouseout", e => { if (e.target.closest && e.target.closest("#fchart svg") && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#fchart svg"))) clearPoint(); });
+let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => { if (tab === "instagram") drawChart(); }, 150); });
+
 document.addEventListener("click", e => {
+  const hp = e.target.closest("#fchart [data-pi]");
+  if (hp) { selPoint(+hp.dataset.pi); return; }
+  if (!e.target.closest("#fchart")) clearPoint();
   const st = e.target.closest(".has-tip");
   document.querySelectorAll(".has-tip.show").forEach(x => { if (x !== st) x.classList.remove("show"); });
   if (st) { st.classList.toggle("show"); return; }
