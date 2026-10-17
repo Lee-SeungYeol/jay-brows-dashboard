@@ -184,7 +184,7 @@ body.lock{overflow:hidden}
 .rpt{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0 0 0 6px}
 .ic.tg .m{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:10px;outline-offset:2px}
 .sent{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--line);color:var(--muted);margin-left:5px}
-/* 조회수 급상승 TOP 10 */
+/* 최근 1시간 조회수 급상승 TOP 10 */
 .tgh{position:relative}
 .tgh .q{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);font-size:10px;margin-left:3px;vertical-align:2px;font-weight:400}
 .tgh .tip{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:min(340px,calc(100vw - 32px));background:var(--text);color:var(--bg);padding:10px 12px;border-radius:10px;font-size:12.5px;font-weight:400;line-height:1.5;box-shadow:0 6px 20px rgba(0,0,0,.2)}
@@ -623,22 +623,25 @@ function render() {
   }
 }
 
-/* ---------- 조회수 급상승 TOP 10 (instagram.top_growth: 직전 업데이트 대비 조회수 증가량) ---------- */
+/* ---------- 최근 1시간 조회수 급상승 TOP 10 (instagram.top_growth: 최근 60분 동안의 조회수 증가량) ---------- */
 const LV = {"강함": "s", "보통": "m", "낮음": "w"};
-const TG_TIP = "직전 업데이트(약 3분) 대비 조회수 증가량 순위예요.<br>강함/보통/낮음 = 이번 업데이트에서 조회수가 늘어난 전체 게시물 중 상위 10% / 상위 40% / 그 외.";
+const TG_TIP = "최근 1시간 동안 늘어난 조회수 순위예요(3분마다 다시 계산).<br>강함/보통/낮음 = 이 1시간 동안 조회수가 늘어난 전체 게시물 중 상위 10% / 상위 40% / 그 외.";
 function topGrowthHTML(d) {
   const rows = d.top_growth || [], m = d.top_growth_meta || {};
-  const head = `<h2 class="tgh has-tip" tabindex="0">조회수 급상승 TOP 10 <i class="q">?</i><div class="tip">${TG_TIP}</div></h2>`;
-  const since = m.since ? `${fullT(Date.parse(m.since))}${m.minutes != null ? ` (${num(Math.round(m.minutes))}분 전)` : ""}` : "";
-  if (!rows.length) return head + `<div class="card empty">직전 업데이트 대비 조회수가 늘어난 게시물이 없어요${since ? `<br><small>${since} 업데이트 기준</small>` : ""}</div>`;
+  const wm = m.window_min != null ? Math.round(m.window_min) : null;
+  const win = wm != null && wm < 55 ? `최근 ${num(wm)}분` : "최근 1시간";
+  const tag = wm != null && wm < 55 ? `${num(wm)}분` : "1시간";
+  const head = `<h2 class="tgh has-tip" tabindex="0">${win} 조회수 급상승 TOP 10 <i class="q">?</i><div class="tip">${TG_TIP}</div></h2>`;
+  const since = m.since ? `${fullT(Date.parse(m.since))}부터 지금까지` : "";
+  if (!rows.length) return head + `<div class="card empty">${win} 동안 조회수가 늘어난 게시물이 없어요${since ? `<br><small>${since} 기준</small>` : ""}</div>`;
   const max = Math.max(...rows.map(r => r.dv), 1);
   const pct = r => r.rate == null ? "" : ` <small>(+${(Math.round(r.rate * 10) / 10).toLocaleString("ko-KR", {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)</small>`;
-  return head + `<div class="card tg"><div class="sub">${since ? `${since} 업데이트 대비 · ` : ""}조회수가 늘어난 게시물 ${num(m.posts_with_growth)}개${m.median_dv != null ? ` · 중앙값 +${num(m.median_dv)}` : ""}</div>` +
+  return head + `<div class="card tg"><div class="sub">${since ? `${since} · ` : ""}조회수가 늘어난 게시물 ${num(m.posts_with_growth)}개${m.median_dv != null ? ` · 중앙값 +${num(m.median_dv)}` : ""}</div>` +
     rows.map((r, i) => `<a class="tgr" href="${esc(r.url)}" target="_blank" rel="noopener" title="${esc(r.text)}">
       <span class="rk">${i + 1}</span>
       ${r.image ? `<img loading="lazy" src="${esc(r.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}
       <span class="mn"><span class="l1"><b class="tb">${r.kind === "REELS" ? "릴스" : "게시물"}</b><span>${esc(r.text) || "(내용 없음)"}</span></span>
-        <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)}</span></span></span>
+        <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)} · ${tag}</span></span></span>
       <span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></a>`).join("") + `</div>`;
 }
 

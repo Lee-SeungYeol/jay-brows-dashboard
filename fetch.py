@@ -401,13 +401,29 @@ def _views_value(rows):
     return None
 
 
+WINDOW_MIN, KEEP_MIN = 60, 75
+
+
 def ig_growth(posts, views, last, now):
-    """Top 10 posts by views gained since the previous update (ig_last.json)."""
-    prev = (last or {}).get("views") or {}
-    since = (last or {}).get("t")
-    mins = None
-    if since:
-        mins = round((datetime.fromisoformat(now) - datetime.fromisoformat(since)).total_seconds() / 60, 1)
+    """Top 10 posts by views gained over the last 60 minutes (rolling window).
+
+    store/ig_views_window.json = [{t, views:{id: n}}, ...], one snapshot per run,
+    pruned to the last ~75 minutes. Baseline = newest snapshot at least 60 min old;
+    until one exists, the oldest snapshot available (window_min says how long).
+    """
+    tnow = datetime.fromisoformat(now)
+    snaps = load("ig_views_window.json", [])
+    if not snaps and last and last.get("views") and last.get("t"):
+        snaps = [{"t": last["t"], "views": last["views"]}]  # seed from the previous run
+    snaps = [s for s in snaps if (tnow - datetime.fromisoformat(s["t"])).total_seconds() <= KEEP_MIN * 60
+             and s["t"] < now]
+    snaps.sort(key=lambda s: datetime.fromisoformat(s["t"]))
+    old = [s for s in snaps if (tnow - datetime.fromisoformat(s["t"])).total_seconds() >= WINDOW_MIN * 60]
+    base = old[-1] if old else (snaps[0] if snaps else None)
+    save("ig_views_window.json", snaps + [{"t": now, "views": {k: v for k, v in views.items() if v is not None}}])
+    prev = (base or {}).get("views") or {}
+    since = (base or {}).get("t")
+    mins = round((tnow - datetime.fromisoformat(since)).total_seconds() / 60, 1) if since else None
     rows = []
     for p in posts:
         v, pv = views.get(p["id"]), prev.get(p["id"])
@@ -433,7 +449,7 @@ def ig_growth(posts, views, last, now):
     median = None
     if n:
         median = grow[n // 2] if n % 2 else (grow[n // 2 - 1] + grow[n // 2]) / 2
-    meta = {"since": since, "minutes": mins, "posts_with_growth": n, "median_dv": median,
+    meta = {"since": since, "window_min": mins, "posts_with_growth": n, "median_dv": median,
             "posts_compared": len(rows)}
     return out, meta
 
