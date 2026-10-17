@@ -278,6 +278,12 @@ def facebook(page_id, tok):
         "reactions_by_type": by_type if any(p["reactions_by_type"] for p in posts) else None,
         "insights_coverage": len(with_ins),
     }
+    # 게시물당 평균 반응 over ALL posts+reels. Shares/saves are averaged over the posts
+    # whose insights we have (all of them once the rotation has covered every post).
+    n, cov = totals_all["posts"], totals_all["insights_coverage"]
+    totals_all["avg_reaction"] = round(
+        (totals_all["likes"] + totals_all["comments"]) / n
+        + ((totals_all["shares"] + totals_all["saves"]) / cov if cov else 0), 2) if n else None
     for m in ("post_impressions_unique", "post_impressions", "post_clicks", "post_media_view",
               "post_total_media_view_unique", "post_video_views"):
         vals = [p["insights"][m] for p in with_ins if isinstance(p["insights"].get(m), (int, float))]
@@ -484,7 +490,8 @@ def instagram(page_id, tok):
     cur_posts = {p["id"]: [p["insights"].get("shares") or 0, p["insights"].get("saved") or 0]
                  for p in with_ins}
     cur = {"followers": prof.get("followers_count"), "likes": totals_all["likes"],
-           "comments": totals_all["comments"]}
+           "comments": totals_all["comments"], "avg_reaction": totals_all["avg_reaction"],
+           "posts": totals_all["posts"]}
     cur.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
     last = load("ig_last.json", None)
     delta = None
@@ -495,7 +502,7 @@ def instagram(page_id, tok):
                 continue
             if k in ("reach", "views", "profile_views", "accounts_engaged") and last.get("day") != day:
                 continue  # daily metrics reset at midnight
-            delta[k] = v - last["values"][k]
+            delta[k] = round(v - last["values"][k], 2)
         both = [i for i in cur_posts if i in last.get("posts", {})]
         delta["shares"] = sum(cur_posts[i][0] - last["posts"][i][0] for i in both)
         delta["saves"] = sum(cur_posts[i][1] - last["posts"][i][1] for i in both)
@@ -503,7 +510,9 @@ def instagram(page_id, tok):
 
     # Per-update series for the charts (last 48h; one point per run, ~every 3 min).
     runs = load("ig_runs.json", [])
-    runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"]})
+    runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
+                 "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
+                 "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"]})
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
     runs = [r for r in runs if r["t"] >= cutoff]
     save("ig_runs.json", runs)
