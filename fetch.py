@@ -342,6 +342,11 @@ def main():
             data["instagram"] = soft(lambda: instagram(page_id, page_tok))
         except Exception as e:
             errors.append(str(e))
+    if TOKEN:
+        info = soft(lambda: get("debug_token", TOKEN, input_token=TOKEN).get("data", {}), {})
+        data["token"] = {"type": info.get("type"), "expires_at": info.get("expires_at"),
+                         "data_access_expires_at": info.get("data_access_expires_at"),
+                         "valid": info.get("is_valid")}
     data["errors"] = errors
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:

@@ -273,7 +273,6 @@ function render() {
     `<div class="grid">` +
     (isIG
       ? stat("팔로워", d.followers, "나를 팔로우하는 계정 수예요.", b, "followers") +
-        stat("팔로잉", d.follows, "내가 팔로우하는 계정 수예요.", b, "follows") +
         stat("게시물", d.media_count, "프로필에 올라간 전체 게시물 수(피드+릴스)예요.", b, "media")
       : stat("팔로워", d.followers) + stat("페이지 좋아요", d.fans)) +
     (isIG
