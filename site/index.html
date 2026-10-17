@@ -64,6 +64,19 @@ let data, tab = "instagram";
 
 function stat(label, v) { return `<div class="card stat"><b>${num(v)}</b><span>${label}</span></div>`; }
 
+const who = c => (c.reply ? "↳ " : "") + esc(c.user);
+const card = (p, extra = "") => `
+    <div class="card post">
+      ${p.image ? `<img loading="lazy" src="${esc(p.image)}" alt="">` : ""}
+      <div class="body">
+        <span class="muted">${extra}${when(p.time)}</span>
+        <p>${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
+        <div class="nums"><span>♥ ${num(p.likes)}</span><span>💬 ${num(p.comments_count)}</span>${p.shares != null ? `<span>↗ ${num(p.shares)}</span>` : ""}</div>
+        ${(p.comments || []).length ? `<details><summary>댓글 보기 (${p.comments.length})</summary>${p.comments.map(c => `<div class="cmt"><b>${who(c)}</b> ${esc(c.text)}</div>`).join("")}</details>` : ""}
+        <a href="${esc(p.url)}" target="_blank" rel="noopener">원문 보기 →</a>
+      </div>
+    </div>`;
+
 function render() {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.k === tab));
   document.documentElement.style.setProperty("--accent", tab === "instagram" ? "var(--ig)" : "var(--fb)");
@@ -88,22 +101,15 @@ function render() {
   }
 
   const all = posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
-    .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 50);
+    .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 100);
   h += `<h2>최근 댓글 (${all.length})</h2><div class="card">` + (all.length
-    ? `<table>${all.map(c => `<tr><td class="u">${esc(c.user)}</td><td>${esc(c.text)}</td><td class="t"><a href="${esc(c.post.url)}" target="_blank" rel="noopener">${when(c.time)}</a></td></tr>`).join("")}</table>`
+    ? `<table>${all.map(c => `<tr><td class="u">${who(c)}</td><td>${esc(c.text)}</td><td class="t"><a href="${esc(c.post.url)}" target="_blank" rel="noopener">${when(c.time)}</a></td></tr>`).join("")}</table>`
     : `<div class="empty">댓글이 없습니다.</div>`) + `</div>`;
 
-  h += `<h2>게시물</h2><div class="posts">` + posts.map(p => `
-    <div class="card post">
-      ${p.image ? `<img loading="lazy" src="${esc(p.image)}" alt="">` : ""}
-      <div class="body">
-        <span class="muted">${when(p.time)}</span>
-        <p>${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
-        <div class="nums"><span>♥ ${num(p.likes)}</span><span>💬 ${num(p.comments_count)}</span>${p.shares != null ? `<span>↗ ${num(p.shares)}</span>` : ""}</div>
-        ${(p.comments || []).length ? `<details><summary>댓글 보기</summary>${p.comments.map(c => `<div class="cmt"><b>${esc(c.user)}</b> ${esc(c.text)}</div>`).join("")}</details>` : ""}
-        <a href="${esc(p.url)}" target="_blank" rel="noopener">원문 보기 →</a>
-      </div>
-    </div>`).join("") + `</div>`;
+  h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
+  if (d.tagged && d.tagged.length)
+    h += `<h2>태그·협업 게시물 (${d.tagged.length})</h2><div class="posts">` +
+      d.tagged.map(p => card(p, `@${esc(p.owner)} · `)).join("") + `</div>`;
   v.innerHTML = h;
 }
 

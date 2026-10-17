@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
 TOKEN = os.environ.get("META_TOKEN", "").strip()
 POST_LIMIT = int(os.environ.get("POST_LIMIT", "25"))
-COMMENT_LIMIT = int(os.environ.get("COMMENT_LIMIT", "20"))
+COMMENT_LIMIT = int(os.environ.get("COMMENT_LIMIT", "300"))
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "data.json")
 
 errors = []
@@ -33,6 +33,21 @@ def get(path, token, **params):
         except Exception:
             msg = body[:300]
         raise RuntimeError(f"{path}: {msg}") from None
+
+
+def paged(path, token, cap, **params):
+    """Follow paging.next until cap items are collected."""
+    first = get(path, token, **params)
+    items, nxt = first.get("data", []), first.get("paging", {}).get("next")
+    while nxt and len(items) < cap:
+        try:
+            with urllib.request.urlopen(nxt, timeout=30) as r:
+                page = json.load(r)
+        except urllib.error.HTTPError:
+            break
+        items += page.get("data", [])
+        nxt = page.get("paging", {}).get("next")
+    return items[:cap]
 
 
 def soft(fn, default=None):
@@ -66,10 +81,11 @@ def resolve_page():
 
 def fb_comments(post_id, tok):
     try:
-        return get(
-            f"{post_id}/comments", tok, limit=COMMENT_LIMIT, order="reverse_chronological",
-            fields="from,message,created_time,like_count",
-        ).get("data", [])
+        # filter=stream returns replies too, flattened in time order.
+        return paged(
+            f"{post_id}/comments", tok, COMMENT_LIMIT, limit=100, filter="stream",
+            order="reverse_chronological", fields="from,message,created_time,like_count,parent{id}",
+        )
     except RuntimeError as e:
         # Some posts (e.g. shared/collab) need App Review to read comments; skip quietly.
         if "(#10)" not in str(e):
@@ -102,6 +118,7 @@ def facebook(page_id, tok):
                 "text": c.get("message", ""),
                 "time": c.get("created_time"),
                 "likes": c.get("like_count", 0),
+                "reply": bool(c.get("parent")),
             } for c in comments],
         })
     return {
@@ -129,10 +146,7 @@ def instagram(page_id, tok):
     for m in media:
         comments = []
         if m.get("comments_count"):
-            comments = soft(lambda: get(
-                f"{m['id']}/comments", tok, limit=COMMENT_LIMIT,
-                fields="username,text,timestamp,like_count",
-            ).get("data", []), [])
+            comments = soft(lambda: ig_comments(m["id"], tok), [])
         out.append({
             "id": m["id"],
             "text": m.get("caption", ""),
@@ -142,13 +156,13 @@ def instagram(page_id, tok):
             "type": m.get("media_type"),
             "likes": m.get("like_count", 0),
             "comments_count": m.get("comments_count", 0),
-            "comments": [{
-                "user": c.get("username", ""),
-                "text": c.get("text", ""),
-                "time": c.get("timestamp"),
-                "likes": c.get("like_count", 0),
-            } for c in comments],
+            "comments": comments,
         })
+    # Posts other accounts tagged us in (includes most collab posts we don't own).
+    tagged = soft(lambda: paged(
+        f"{ig_id}/tags", tok, POST_LIMIT, limit=POST_LIMIT,
+        fields="id,username,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
+    ), [])
     reach = soft(lambda: get(f"{ig_id}/insights", tok, metric="reach", period="day").get("data", []), [])
     daily_reach = [{"date": v["end_time"][:10], "value": v["value"]}
                    for d in reach for v in d.get("values", [])]
@@ -161,7 +175,34 @@ def instagram(page_id, tok):
         "media_count": prof.get("media_count"),
         "daily_reach": daily_reach,
         "posts": out,
+        "tagged": [{
+            "id": m["id"],
+            "owner": m.get("username", ""),
+            "text": m.get("caption", ""),
+            "time": m.get("timestamp"),
+            "url": m.get("permalink"),
+            "image": m.get("thumbnail_url") or m.get("media_url"),
+            "type": m.get("media_type"),
+            "likes": m.get("like_count", 0),
+            "comments_count": m.get("comments_count", 0),
+        } for m in tagged],
     }
+
+
+def ig_comments(media_id, tok):
+    """Top-level comments plus their replies, flattened."""
+    out = []
+    rows = paged(
+        f"{media_id}/comments", tok, COMMENT_LIMIT, limit=50,
+        fields="username,text,timestamp,like_count,replies{username,text,timestamp,like_count}",
+    )
+    for c in rows:
+        out.append({"user": c.get("username", ""), "text": c.get("text", ""),
+                    "time": c.get("timestamp"), "likes": c.get("like_count", 0), "reply": False})
+        for r in c.get("replies", {}).get("data", []):
+            out.append({"user": r.get("username", ""), "text": r.get("text", ""),
+                        "time": r.get("timestamp"), "likes": r.get("like_count", 0), "reply": True})
+    return out[:COMMENT_LIMIT]
 
 
 def main():
