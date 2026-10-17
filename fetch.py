@@ -3,6 +3,7 @@
 Writes site/data.json. Runs in GitHub Actions; token comes from the
 META_TOKEN secret (a Page access token, or a user token with page access).
 """
+import bisect
 import json
 import os
 import sys
@@ -503,6 +504,51 @@ def ig_hour_delta(runs, row):
     return delta
 
 
+HV_TOL = timedelta(minutes=10)
+
+
+def _hv_at(pts, b):
+    """views_total at KST hour boundary b: first run at/after b within 10 min, else the closest earlier run within 10 min."""
+    i = bisect.bisect_left(pts, (b,))
+    if i < len(pts) and pts[i][0] - b <= HV_TOL:
+        return pts[i]
+    if i > 0 and b - pts[i - 1][0] <= HV_TOL:
+        return pts[i - 1]
+    return None
+
+
+def ig_hourly_views(runs):
+    """Store ig_hourly_views.json = {"YYYY-MM-DD": {"HH": gain}} (KST): views_total gain per completed clock hour."""
+    kst = timezone(timedelta(hours=9))
+    store = load("ig_hourly_views.json", {})
+    pts = sorted((datetime.fromisoformat(r["t"]), r["views_total"]) for r in runs
+                 if r.get("t") and r.get("views_total") is not None)
+    now = datetime.now(timezone.utc)
+    cur_h = now.astimezone(kst).replace(minute=0, second=0, microsecond=0)
+    so_far = None
+    if pts:
+        h = pts[0][0].astimezone(kst).replace(minute=0, second=0, microsecond=0)
+        while h + timedelta(hours=1) <= cur_h:
+            day, hh = h.date().isoformat(), f"{h.hour:02d}"
+            e = h + timedelta(hours=1)
+            if hh not in store.get(day, {}) and now >= e + HV_TOL:
+                a, b = _hv_at(pts, h), _hv_at(pts, e)
+                if a and b and (b[0] - a[0]) >= timedelta(minutes=50):
+                    store.setdefault(day, {})[hh] = max(0, b[1] - a[1])
+            h = e
+        a = _hv_at(pts, cur_h)
+        if a and pts[-1][0] >= a[0]:
+            so_far = max(0, pts[-1][1] - a[1])
+    store = {d: dict(sorted(v.items())) for d, v in sorted(store.items())}
+    save("ig_hourly_views.json", store)
+    avg, n = [], []
+    for i in range(24):
+        vals = [v[f"{i:02d}"] for v in store.values() if f"{i:02d}" in v]
+        n.append(len(vals))
+        avg.append(round(sum(vals) / len(vals)) if vals else None)
+    return {"days": store, "avg": avg, "n": n, "current_hour": cur_h.hour, "current_hour_so_far": so_far}
+
+
 def ig_media_row(m):
     kind = "REELS" if m.get("media_product_type") == "REELS" else "FEED"
     return {
@@ -679,6 +725,7 @@ def instagram(page_id, tok):
     runs.append(row)
     delta = ig_hour_delta(runs, row)
     save("ig_runs.json", runs)
+    hourly = soft(lambda: ig_hourly_views(runs))
 
     hist = load("ig_followers.json", [])
     if not hist or hist[-1]["t"][:13] != now[:13]:
@@ -700,6 +747,7 @@ def instagram(page_id, tok):
         "top_growth": top_growth,
         "top_growth_meta": top_meta,
         "runs": runs,
+        "hourly_views": hourly,
         "follower_history": hist,
         "posts": posts,
         "tagged": [{
