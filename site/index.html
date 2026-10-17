@@ -206,6 +206,20 @@ body.lock{overflow:hidden}
 .lv.s{background:#dcfce7;color:#15803d}.lv.m{background:#fef3c7;color:#b45309}.lv.w{background:var(--line);color:var(--muted)}
 @media (prefers-color-scheme:dark){.lv.s{background:#14532d;color:#86efac}.lv.m{background:#422c06;color:#fcd34d}}
 @media (max-width:420px){.tgr{grid-template-columns:16px 36px minmax(0,1fr) auto;gap:8px}.tgr img,.tgr .ph{width:36px;height:36px}}
+/* 댓글 많이 단 계정 TOP 10 */
+.tcr{cursor:pointer;grid-template-columns:18px 40px minmax(0,1fr)}
+.tcr .lb{min-width:0}.tcr .l3 .lv{font-size:10.5px;padding:4px 7px}
+.tcr .tca{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px}
+.tcr .l1 .rt{flex:none;color:var(--muted);font-size:11.5px}
+.tcr .l1 b.u{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tcr.on{background:color-mix(in srgb,var(--text) 5%,transparent)}
+.tcl{margin:0 2px 8px 30px;padding:2px 0 4px;border-left:2px solid var(--line)}
+.tcl .tci{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:start;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--text);text-decoration:none;font-size:13px}
+.tcl .tci:hover,.tcl .tci:focus-visible{background:color-mix(in srgb,var(--text) 5%,transparent);outline:none}
+.tcl .tci img,.tcl .tci .ph{width:28px;height:28px;border-radius:5px;object-fit:cover;background:var(--line);display:block}
+.tcl .tci .tx{overflow-wrap:anywhere}.tcl .tci small{display:block;color:var(--muted);font-size:11.5px}
+.tcl .tcm{font-size:12px;color:var(--muted);padding:4px 8px}
+@media (max-width:420px){.tcr{grid-template-columns:16px 36px minmax(0,1fr)}.tcr .tca{width:36px;height:36px;font-size:15px}.tcl{margin-left:12px}}
 </style>
 </head>
 <body>
@@ -585,7 +599,7 @@ function render() {
 
   indexThreads();
   h += `<h2>최근 댓글</h2><div class="cf" id="cfbar" role="group" aria-label="댓글 필터"></div><div class="card" id="thlist"></div>`;
-  if (isIG) h += topGrowthHTML(d);
+  if (isIG) h += topGrowthHTML(d) + `<div id="tcbox">${topCmHTML(d)}</div>`;
 
   if (isIG) {
     const lists = igLists(d);
@@ -629,6 +643,49 @@ function topGrowthHTML(d) {
       <span class="mn"><span class="l1"><b class="tb">${r.kind === "REELS" ? "릴스" : "게시물"}</b><span>${esc(r.text) || "(내용 없음)"}</span></span>
         <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)} · ${tag}</span></span></span>
       <span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></a>`).join("") + `</div>`;
+}
+
+/* ---------- 댓글 많이 단 계정 TOP 10 (모든 게시물·릴스의 댓글+답글을 계정별로 집계, 내 계정 제외) ---------- */
+const TC_TIP = "수집된 모든 게시물·릴스의 댓글과 답글을 계정별로 센 순위예요(내 계정 제외). 3분마다 갱신돼요.";
+const tcOpen = new Set();  // 펼친 계정 — 1분 새로고침 후에도 유지
+function topCommenters(d) {
+  const m = new Map();
+  (d.posts || []).forEach(p => threadsOf(p).forEach(t => [t.root, ...t.replies].forEach(c => {
+    const u = String(c.user || "").trim();
+    if (!u || isOwner(u)) return;
+    const k = u.toLowerCase();
+    let a = m.get(k);
+    if (!a) m.set(k, a = {user: u, n: 0, posts: new Set(), last: 0, th: 0, got: 0, cs: []});
+    a.n++; a.posts.add(pid(p)); a.last = Math.max(a.last, ts(c.time));
+    if (c === t.root) { a.th++; if (t.done) a.got++; }
+    a.cs.push({c, p, th: t.id});
+  })));
+  return [...m.values()].sort((a, b) => b.n - a.n || b.last - a.last).slice(0, 10);
+}
+function topCmHTML(d) {
+  const head = `<h2 class="tgh has-tip" tabindex="0">댓글 많이 단 계정 TOP 10 <i class="q">?</i><div class="tip">${TC_TIP}</div></h2>`;
+  const rows = topCommenters(d);
+  if (!rows.length) return head + `<div class="card empty">아직 집계할 댓글이 없어요</div>`;
+  const capped = (d.posts || []).some(p => (p.comments_count || 0) > (p.comments || []).length);
+  const max = Math.max(...rows.map(r => r.n), 1);
+  return head + `<div class="card tg">${capped ? `<div class="sub">일부 게시물은 댓글이 많아 최근 300개까지만 집계돼요</div>` : ""}` + rows.map((r, i) => {
+    const k = r.user.toLowerCase(), on = tcOpen.has(k);
+    const ini = ([...r.user.replace(/^[@._]+/, "")][0] || "?").toUpperCase();
+    const list = on ? r.cs.slice().sort((a, b) => ts(b.c.time) - ts(a.c.time)) : [];
+    return `<div class="tgr tcr${on ? " on" : ""}" data-tcu="${esc(k)}" tabindex="0" role="button" aria-expanded="${on}">
+      <span class="rk">${i + 1}</span><span class="tca" style="background:${avColor(r.user)}">${esc(ini)}</span>
+      <span class="mn"><span class="l1"><b class="u">@${esc(r.user)}</b><span class="rt">최근 ${rel(r.last)}</span></span>
+        <span class="l2"><span class="bt"><span class="bf" style="width:${(r.n / max * 100).toFixed(1)}%"></span></span><span class="lb">댓글 ${num(r.n)}개 · 게시물 ${num(r.posts.size)}개</span></span>
+        ${r.th ? `<span class="l3"><span class="lv ${r.got ? "s" : "w"}" title="이 계정이 단 원댓글 중 내가 답글 단 대화 수">답글 받음 ${num(r.got)}/${num(r.th)}</span></span>` : ""}</span></div>` +
+      (on ? `<div class="tcl">${list.slice(0, 30).map(x => `<div class="tci" data-th="${esc(x.th)}" tabindex="0" role="button">
+        ${x.p.image ? `<img loading="lazy" src="${esc(x.p.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}
+        <span class="tx">${x.c.reply ? "↳ " : ""}${esc(x.c.text) || "<span class='muted'>(내용 없음)</span>"}<small>${rel(x.c.time)} · ${when(x.c.time)}</small></span></div>`).join("")}${list.length > 30 ? `<div class="tcm">외 ${num(list.length - 30)}개 더</div>` : ""}</div>` : "");
+  }).join("") + `</div>`;
+}
+function tcToggle(k) {
+  tcOpen.has(k) ? tcOpen.delete(k) : tcOpen.add(k);
+  const box = document.getElementById("tcbox");
+  if (box && data && data.instagram) { box.innerHTML = topCmHTML(data.instagram); const el = box.querySelector(`[data-tcu="${CSS.escape(k)}"]`); if (el) el.focus({preventScroll: true}); }
 }
 
 /* ---------- 업데이트별 증감 차트 (instagram.runs: 데이터 업데이트마다 한 행) ---------- */
@@ -754,6 +811,8 @@ document.addEventListener("click", e => {
   const cb = e.target.closest("button[data-cf]");
   if (cb) { cf = cb.dataset.cf; cShown = C_PAGE; store.set("cf", cf); thList(); return; }
   if (e.target.closest("button[data-cmore]")) { cShown += C_PAGE; thList(); return; }
+  const tcu = e.target.closest("[data-tcu]");
+  if (tcu) { tcToggle(tcu.dataset.tcu); return; }
   const th = e.target.closest("[data-th]");
   if (th) { showTh(th.dataset.th); return; }
   if (e.target.closest("button[data-more]")) { shown += PAGE; renderList(); return; }
@@ -765,6 +824,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && openTh) { closeTh(); return; }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-tcu]")) { e.preventDefault(); tcToggle(e.target.dataset.tcu); return; }
   if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-th]")) { e.preventDefault(); showTh(e.target.dataset.th); }
 });
 document.addEventListener("input", e => {
