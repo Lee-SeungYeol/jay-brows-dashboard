@@ -16,7 +16,7 @@ API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
 TOKEN = os.environ.get("META_TOKEN", "").strip()
 POST_LIMIT = int(os.environ.get("POST_LIMIT", "25"))
 COMMENT_LIMIT = int(os.environ.get("COMMENT_LIMIT", "300"))
-VIEW_GOAL = 1_000_000  # owner goal: views per post (drives 조회수 급상승 levels)
+LEVEL_STRONG, LEVEL_MID = 1_000_000, 500_000  # 조회수 급상승 level by total views: 강함 ≥ 1M, 보통 ≥ 500K
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "data.json")
 
 errors = []
@@ -436,36 +436,21 @@ def ig_growth(posts, views, last, now):
     grow = sorted(r["dv"] for r in rows if r["dv"] > 0)
     n = len(grow)
 
-    def goal(r):
-        """Pace toward VIEW_GOAL at the current window's hourly rate."""
-        per_hour = r["dv"] * 60 / mins if mins else None
-        remaining = max(0, VIEW_GOAL - r["views"])
-        eta = round(remaining / per_hour, 1) if per_hour and per_hour > 0 else None
-        if r["views"] >= VIEW_GOAL:
-            lv = "달성"
-        elif mins is None or mins < 30:
-            lv = "수집 중"
-        elif eta is not None and eta <= 168:
-            lv = "강함"
-        elif eta is not None and eta <= 720:
-            lv = "보통"
-        else:
-            lv = "낮음"
-        return {"per_hour": round(per_hour, 1) if per_hour is not None else None, "eta_hours": eta,
-                "goal_pct": round(r["views"] / VIEW_GOAL * 100, 2), "level": lv}
+    def level(v):
+        return "강함" if v >= LEVEL_STRONG else "보통" if v >= LEVEL_MID else "낮음"
 
     top = sorted((r for r in rows if r["dv"] > 0), key=lambda r: (r["dv"], r["rate"] or 0), reverse=True)[:10]
     out = [{
         "id": r["p"]["id"], "kind": r["p"]["kind"], "type": r["p"]["type"],
         "text": (r["p"].get("text") or "")[:80], "url": r["p"]["url"], "image": r["p"]["image"],
         "time": r["p"]["time"], "views": r["views"], "views_prev": r["views_prev"], "dv": r["dv"],
-        "rate": r["rate"], **goal(r),
+        "rate": r["rate"], "level": level(r["views"]),
     } for r in top]
     median = None
     if n:
         median = grow[n // 2] if n % 2 else (grow[n // 2 - 1] + grow[n // 2]) / 2
     meta = {"since": since, "window_min": mins, "posts_with_growth": n, "median_dv": median,
-            "posts_compared": len(rows), "goal": VIEW_GOAL}
+            "posts_compared": len(rows)}
     return out, meta
 
 

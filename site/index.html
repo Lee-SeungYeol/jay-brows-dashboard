@@ -204,12 +204,7 @@ body.lock{overflow:hidden}
 .tgr .lb small{color:var(--muted);font-weight:500;font-size:11.5px}
 .lv{font-size:11px;font-weight:700;line-height:1;padding:5px 8px;border-radius:999px;white-space:nowrap}
 .lv.s{background:#dcfce7;color:#15803d}.lv.m{background:#fef3c7;color:#b45309}.lv.w{background:var(--line);color:var(--muted)}
-.lv.g{background:#ede9fe;color:#6d28d9}.lv.c{background:none;color:var(--muted);border:1px solid var(--muted);padding:4px 7px}
-@media (prefers-color-scheme:dark){.lv.s{background:#14532d;color:#86efac}.lv.m{background:#422c06;color:#fcd34d}.lv.g{background:#3b1f6e;color:#c4b5fd}}
-.tgr .l3{display:flex;gap:8px;align-items:center;min-width:0;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-.tgr .gt{flex:0 1 90px;min-width:30px;height:4px;border-radius:999px;background:color-mix(in srgb,var(--text) 7%,transparent);overflow:hidden;display:block}
-.tgr .gf{display:block;height:100%;border-radius:999px;background:#8b5cf6;min-width:2px}
-.tgr .l3 .gl{flex:none;white-space:nowrap}.tgr .l3 .eta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (prefers-color-scheme:dark){.lv.s{background:#14532d;color:#86efac}.lv.m{background:#422c06;color:#fcd34d}}
 @media (max-width:420px){.tgr{grid-template-columns:16px 36px minmax(0,1fr) auto;gap:8px}.tgr img,.tgr .ph{width:36px;height:36px}}
 </style>
 </head>
@@ -615,20 +610,8 @@ function render() {
 }
 
 /* ---------- 최근 1시간 조회수 급상승 TOP 10 (instagram.top_growth: 최근 60분 동안의 조회수 증가량) ---------- */
-const LV = {"강함": "s", "보통": "m", "낮음": "w", "달성": "g", "수집 중": "c"};
-const TG_TIP = "최근 1시간 동안 늘어난 조회수 순위예요(3분마다 다시 계산). 목표는 게시물당 조회수 100만이에요.<br>강함 = 지금 1시간 속도로 7일 안에 100만 도달 / 보통 = 30일 안 / 낮음 = 그 이상 · 30분 이상 데이터가 쌓여야 판단해요.";
-const pctTxt = v => (Math.round(v * 10) / 10).toLocaleString("ko-KR", {maximumFractionDigits: 1});
-function goalLine(r, goal) {
-  if (r.goal_pct == null) return "";
-  const done = r.level === "달성" || r.views >= goal;
-  let eta = "";
-  if (done) eta = "100만 달성 🎉";
-  else if (r.eta_hours != null) {
-    const d = r.eta_hours / 24;
-    eta = d > 365 ? "이 속도면 1년 이상" : r.eta_hours < 24 ? `이 속도면 약 ${num(Math.max(1, Math.round(r.eta_hours)))}시간 후 100만` : `이 속도면 약 ${num(Math.round(d))}일 후 100만`;
-  }
-  return `<span class="l3"><span class="gt"><span class="gf" style="width:${Math.min(100, r.goal_pct).toFixed(1)}%"></span></span><span class="gl">목표 100만 · ${pctTxt(r.goal_pct)}%</span>${eta ? `<span class="eta">${eta}</span>` : ""}</span>`;
-}
+const LV = {"강함": "s", "보통": "m", "낮음": "w"};
+const TG_TIP = "순위 = 최근 1시간 동안 늘어난 조회수 순(3분마다 다시 계산).<br>강함 = 누적 조회수 100만 이상 · 보통 = 50만~100만 · 낮음 = 50만 미만.";
 function topGrowthHTML(d) {
   const rows = d.top_growth || [], m = d.top_growth_meta || {};
   const wm = m.window_min != null ? Math.round(m.window_min) : null;
@@ -644,7 +627,7 @@ function topGrowthHTML(d) {
       <span class="rk">${i + 1}</span>
       ${r.image ? `<img loading="lazy" src="${esc(r.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}
       <span class="mn"><span class="l1"><b class="tb">${r.kind === "REELS" ? "릴스" : "게시물"}</b><span>${esc(r.text) || "(내용 없음)"}</span></span>
-        <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)} · ${tag}</span></span>${goalLine(r, m.goal || 1e6)}</span>
+        <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)} · ${tag}</span></span></span>
       <span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></a>`).join("") + `</div>`;
 }
 
