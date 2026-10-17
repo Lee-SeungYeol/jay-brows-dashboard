@@ -8,6 +8,7 @@ on:
     branches: [main]
 
 permissions:
+  actions: write
   contents: write
   pages: write
   id-token: write
@@ -57,3 +58,12 @@ jobs:
           path: site
       - id: deploy
         uses: actions/deploy-pages@v4
+      # GitHub's cron is unreliable (often skipped or delayed), so each run queues the next one.
+      # Cron above stays as a backup in case the chain ever breaks.
+      - name: Queue next run
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 60
+          gh workflow run update.yml --ref main -R "${{ github.repository }}"
