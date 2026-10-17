@@ -167,6 +167,31 @@ td{overflow-wrap:anywhere}
 .atag{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--accent);color:#fff;margin-right:5px;vertical-align:1px}
 @media (max-width:600px){#cm{padding:0;align-items:flex-end}#cm .sh{width:100%;max-height:none;height:94vh;border-radius:16px 16px 0 0}}
 body.lock{overflow:hidden}
+/* 조회수 급상승 TOP 10 */
+.tgh{position:relative}
+.tgh .q{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);font-size:10px;margin-left:3px;vertical-align:2px;font-weight:400}
+.tgh .tip{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:min(340px,calc(100vw - 32px));background:var(--text);color:var(--bg);padding:10px 12px;border-radius:10px;font-size:12.5px;font-weight:400;line-height:1.5;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.tgh .tip small{opacity:.75}
+.tg{padding:6px 10px}
+.tg .sub{font-size:12px;color:var(--muted);margin:4px 2px 6px;overflow-wrap:anywhere}
+.tgr{display:grid;grid-template-columns:18px 40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 2px;border-top:1px solid var(--line);color:var(--text);text-decoration:none;border-radius:6px}
+.tg .sub+.tgr{border-top:0}
+.tgr:hover,.tgr:focus-visible{background:color-mix(in srgb,var(--text) 5%,transparent);outline:none}
+.tgr .rk{font-weight:700;font-size:14px;text-align:center;font-variant-numeric:tabular-nums;color:var(--muted)}
+.tgr img,.tgr .ph{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--line);display:block}
+.tgr .mn{min-width:0;display:flex;flex-direction:column;gap:5px}
+.tgr .l1{display:flex;gap:6px;align-items:center;min-width:0;font-size:13px}
+.tgr .l1 span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tgr .tb{flex:none;font-size:10.5px;font-weight:600;line-height:1;padding:4px 6px;border-radius:999px;background:var(--line);color:var(--text)}
+.tgr .l2{display:flex;gap:8px;align-items:center;min-width:0}
+.tgr .bt{flex:1 1 auto;min-width:40px;height:8px;border-radius:999px;background:color-mix(in srgb,var(--text) 7%,transparent);overflow:hidden}
+.tgr .bt,.tgr .bf{display:block}.tgr .bf{height:100%;border-radius:999px;background:var(--accent,var(--ig));min-width:3px}
+.tgr .lb{flex:none;min-width:10.8em;text-align:right;font-size:12px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tgr .lb small{color:var(--muted);font-weight:500;font-size:11.5px}
+.lv{font-size:11px;font-weight:700;line-height:1;padding:5px 8px;border-radius:999px;white-space:nowrap}
+.lv.s{background:#dcfce7;color:#15803d}.lv.m{background:#fef3c7;color:#b45309}.lv.w{background:var(--line);color:var(--muted)}
+@media (prefers-color-scheme:dark){.lv.s{background:#14532d;color:#86efac}.lv.m{background:#422c06;color:#fcd34d}}
+@media (max-width:420px){.tgr{grid-template-columns:16px 36px minmax(0,1fr) auto;gap:8px}.tgr img,.tgr .ph{width:36px;height:36px}}
 </style>
 </head>
 <body>
@@ -441,6 +466,7 @@ function render() {
 
   indexThreads();
   h += `<h2>최근 댓글</h2><div class="cf" id="cfbar" role="group" aria-label="댓글 필터"></div><div class="card" id="thlist"></div>`;
+  if (isIG) h += topGrowthHTML(d);
 
   if (isIG) {
     const lists = igLists(d);
@@ -464,11 +490,31 @@ function render() {
   }
 }
 
+/* ---------- 조회수 급상승 TOP 10 (instagram.top_growth: 직전 업데이트 대비 조회수 증가량) ---------- */
+const LV = {"강함": "s", "보통": "m", "낮음": "w"};
+const TG_TIP = "직전 업데이트(약 3분) 대비 조회수 증가량 순위예요.<br>강함/보통/낮음 = 이번 업데이트에서 조회수가 늘어난 전체 게시물 중 상위 10% / 상위 40% / 그 외.";
+function topGrowthHTML(d) {
+  const rows = d.top_growth || [], m = d.top_growth_meta || {};
+  const head = `<h2 class="tgh has-tip" tabindex="0">조회수 급상승 TOP 10 <i class="q">?</i><div class="tip">${TG_TIP}</div></h2>`;
+  const since = m.since ? `${fullT(Date.parse(m.since))}${m.minutes != null ? ` (${num(Math.round(m.minutes))}분 전)` : ""}` : "";
+  if (!rows.length) return head + `<div class="card empty">직전 업데이트 대비 조회수가 늘어난 게시물이 없어요${since ? `<br><small>${since} 업데이트 기준</small>` : ""}</div>`;
+  const max = Math.max(...rows.map(r => r.dv), 1);
+  const pct = r => r.rate == null ? "" : ` <small>(+${(Math.round(r.rate * 10) / 10).toLocaleString("ko-KR", {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)</small>`;
+  return head + `<div class="card tg"><div class="sub">${since ? `${since} 업데이트 대비 · ` : ""}조회수가 늘어난 게시물 ${num(m.posts_with_growth)}개${m.median_dv != null ? ` · 중앙값 +${num(m.median_dv)}` : ""}</div>` +
+    rows.map((r, i) => `<a class="tgr" href="${esc(r.url)}" target="_blank" rel="noopener" title="${esc(r.text)}">
+      <span class="rk">${i + 1}</span>
+      ${r.image ? `<img loading="lazy" src="${esc(r.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}
+      <span class="mn"><span class="l1"><b class="tb">${r.kind === "REELS" ? "릴스" : "게시물"}</b><span>${esc(r.text) || "(내용 없음)"}</span></span>
+        <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)}</span></span></span>
+      <span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></a>`).join("") + `</div>`;
+}
+
 /* ---------- 업데이트별 증감 차트 (instagram.runs: 데이터 업데이트마다 한 행) ---------- */
 const GAP_MS = 15 * 6e4;
 const CHARTS = [
   {id: "fchart", key: "followers", title: "팔로워 수", abs: v => `팔로워 ${num(v)}명`},
   {id: "lchart", key: "likes", title: "전체 좋아요", abs: v => `전체 좋아요 ${num(v)}`},
+  {id: "vchart", key: "views_total", title: "전체 조회수", abs: v => `전체 조회수 ${num(v)}`},
   {id: "achart", key: "avg_reaction", title: "게시물당 평균 반응", dec: 2, tip: AVG_TIP, notes: true, abs: v => `평균 반응 ${v.toFixed(2)}`},
 ];
 const chartSel = {};   // 차트 id → 선택된 점의 시각(t) — 새로고침 후에도 유지

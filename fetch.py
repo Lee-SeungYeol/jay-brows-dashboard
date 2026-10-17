@@ -355,6 +355,89 @@ def insights(media_id, kind, tok):
     return {}
 
 
+def ig_views_all(ids, tok):
+    """Current `views` for every media id via the Graph batch API (50 per request, in parallel).
+    Per-post failures are skipped; a failed batch falls back to one call per post."""
+    def one(mid):
+        try:
+            rows = get(f"{mid}/insights", tok, metric="views").get("data", [])
+        except RuntimeError:
+            return mid, None
+        return mid, _views_value(rows)
+
+    def chunk(ids50):
+        body = urllib.parse.urlencode({
+            "access_token": tok, "include_headers": "false",
+            "batch": json.dumps([{"method": "GET", "relative_url": f"{i}/insights?metric=views"} for i in ids50]),
+        }).encode()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(API + "/", data=body), timeout=60) as r:
+                res = json.load(r)
+        except Exception:
+            return [one(i) for i in ids50]
+        out = []
+        for mid, item in zip(ids50, res):
+            v = None
+            if item and item.get("code") == 200:
+                try:
+                    v = _views_value(json.loads(item.get("body") or "{}").get("data", []))
+                except ValueError:
+                    pass
+            out.append((mid, v))
+        return out
+
+    chunks = [ids[i:i + 50] for i in range(0, len(ids), 50)]
+    views = {}
+    with ThreadPoolExecutor(max_workers=max(1, min(8, len(chunks)))) as pool:
+        for rows in pool.map(chunk, chunks):
+            views.update({mid: v for mid, v in rows if isinstance(v, (int, float))})
+    return views
+
+
+def _views_value(rows):
+    for r in rows:
+        if r.get("name") == "views":
+            return r.get("total_value", {}).get("value") if "total_value" in r else (r.get("values") or [{}])[0].get("value")
+    return None
+
+
+def ig_growth(posts, views, last, now):
+    """Top 10 posts by views gained since the previous update (ig_last.json)."""
+    prev = (last or {}).get("views") or {}
+    since = (last or {}).get("t")
+    mins = None
+    if since:
+        mins = round((datetime.fromisoformat(now) - datetime.fromisoformat(since)).total_seconds() / 60, 1)
+    rows = []
+    for p in posts:
+        v, pv = views.get(p["id"]), prev.get(p["id"])
+        if v is None or pv is None:
+            continue
+        dv = v - pv
+        rows.append({"p": p, "views": v, "views_prev": pv, "dv": dv,
+                     "rate": round(dv / pv * 100, 2) if pv else None})
+    grow = sorted(r["dv"] for r in rows if r["dv"] > 0)
+    n = len(grow)
+
+    def level(dv):
+        pct = sum(1 for x in grow if x <= dv) / n * 100
+        return "강함" if pct >= 90 else "보통" if pct >= 60 else "낮음"
+
+    top = sorted((r for r in rows if r["dv"] > 0), key=lambda r: (r["dv"], r["rate"] or 0), reverse=True)[:10]
+    out = [{
+        "id": r["p"]["id"], "kind": r["p"]["kind"], "type": r["p"]["type"],
+        "text": (r["p"].get("text") or "")[:80], "url": r["p"]["url"], "image": r["p"]["image"],
+        "time": r["p"]["time"], "views": r["views"], "views_prev": r["views_prev"], "dv": r["dv"],
+        "rate": r["rate"], "level": level(r["dv"]),
+    } for r in top]
+    median = None
+    if n:
+        median = grow[n // 2] if n % 2 else (grow[n // 2 - 1] + grow[n // 2]) / 2
+    meta = {"since": since, "minutes": mins, "posts_with_growth": n, "median_dv": median,
+            "posts_compared": len(rows)}
+    return out, meta
+
+
 def ig_media_row(m):
     kind = "REELS" if m.get("media_product_type") == "REELS" else "FEED"
     return {
@@ -418,6 +501,18 @@ def instagram(page_id, tok):
     for p in posts:
         p.update(detail.get(p["id"], {}))
     save("ig_detail.json", detail)
+
+    # Current views for every post+reel, every run (one batch call per 50 posts).
+    t_views = datetime.now(timezone.utc)
+    views = soft(lambda: ig_views_all([p["id"] for p in posts], tok), {}) or {}
+    views_sec = round((datetime.now(timezone.utc) - t_views).total_seconds(), 1)
+    for p in posts:
+        v = views.get(p["id"])
+        if v is None:
+            continue
+        p["views"] = v
+        if p.get("insights"):
+            p["insights"] = {**p["insights"], "views": v}
 
     # Posts other accounts tagged us in (most collab posts we don't own show up here).
     # The full list is slow (API only allows small pages), so refresh it hourly.
@@ -491,6 +586,14 @@ def instagram(page_id, tok):
            "posts": totals_all["posts"]}
     cur.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
     last = load("ig_last.json", None)
+    prev_views = (last or {}).get("views") or {}
+    views_store = {p["id"]: views.get(p["id"], prev_views.get(p["id"])) for p in posts}
+    views_store = {k: v for k, v in views_store.items() if v is not None}
+    views_total = sum(views_store.values()) if posts and len(views_store) == len(posts) else None
+    totals_all["views_total"] = views_total
+    cur["views_total"] = views_total
+    top_growth, top_meta = ig_growth(posts, views, last, now)
+    top_meta.update({"views_fetched": len(views), "views_seconds": views_sec})
     delta = None
     if last:
         delta = {"since": last["t"]}
@@ -509,13 +612,14 @@ def instagram(page_id, tok):
         if n_posts and last["values"].get("posts") == n_posts and "likes" in delta and "comments" in delta:
             delta["avg_reaction"] = round(
                 (delta["likes"] + delta["comments"] + delta["shares"] + delta["saves"]) / n_posts, 2)
-    save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts})
+    save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts, "views": views_store})
 
     # Per-update series for the charts (one point per run, ~every 3 min; kept forever).
     runs = load("ig_runs.json", [])
     runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
                  "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
-                 "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"]})
+                 "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"],
+                 "views_total": views_total})
     save("ig_runs.json", runs)
 
     hist = load("ig_followers.json", [])
@@ -535,6 +639,8 @@ def instagram(page_id, tok):
         "yesterday": yesterday,
         "totals": totals_all,
         "delta": delta,
+        "top_growth": top_growth,
+        "top_growth_meta": top_meta,
         "runs": runs,
         "follower_history": hist,
         "posts": posts,
