@@ -227,7 +227,7 @@ body.lock{overflow:hidden}
 <div id="cm" role="dialog" aria-modal="true" aria-label="댓글 스레드"><div class="sh"><div class="top" id="cmtop"></div><div class="bd" id="cmbd"></div><div class="rpx" id="cmrp" hidden></div></div></div>
 <script>
 // 답글 Worker 주소 (비어 있으면 대시보드 답글 기능 숨김). 예: "https://jay-brows-reply.xxx.workers.dev"
-const REPLY_API = "";
+const REPLY_API = "https://jay-brows-reply.stl990726.workers.dev";
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = n => n == null ? "–" : Number(n).toLocaleString("ko-KR");
 // 간단한 한국식 단위: 1.2만, 3.4억
