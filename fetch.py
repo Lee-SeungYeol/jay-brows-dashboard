@@ -9,6 +9,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
@@ -331,9 +332,12 @@ def save(name, obj):
         json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
 
 
+IG_OK_METRICS = {}  # kind -> metric list that worked last time (persisted in store)
+
+
 def insights(media_id, kind, tok):
     """Per-media insights; metrics a media type doesn't support are dropped and retried."""
-    metrics = POST_METRICS[kind].split(",")
+    metrics = list(IG_OK_METRICS.get(kind) or POST_METRICS[kind].split(","))
     for _ in range(len(metrics)):
         try:
             rows = get(f"{media_id}/insights", tok, metric=",".join(metrics)).get("data", [])
@@ -341,6 +345,7 @@ def insights(media_id, kind, tok):
             for r in rows:
                 v = r.get("total_value", {}).get("value") if "total_value" in r else (r.get("values") or [{}])[0].get("value")
                 out[r["name"]] = v
+            IG_OK_METRICS.setdefault(kind, metrics)
             return out
         except RuntimeError as e:
             bad = next((m for m in metrics if m in str(e)), None)
@@ -389,10 +394,25 @@ def instagram(page_id, tok):
     targets = posts[:POST_LIMIT] + older[cursor:cursor + ROTATE]
     save("ig_cursor.json", cursor + ROTATE)
     now = datetime.now(timezone.utc).isoformat()
-    for p in targets:
-        d = {"insights": insights(p["id"], p["kind"], tok), "checked": now}
-        d["comments"] = soft(lambda: ig_comments(p["id"], tok), []) if p["comments_count"] else []
-        detail[p["id"]] = d
+    IG_OK_METRICS.update(load("ig_metrics.json", {}))
+
+    def refresh(p):
+        old = detail.get(p["id"], {})
+        d = {"insights": insights(p["id"], p["kind"], tok) or old.get("insights"), "checked": now}
+        # Comments: re-read when the count changed, otherwise at most hourly.
+        fresh = (old.get("comments_seen") == p["comments_count"] and old.get("comments_checked", "")[:13] == now[:13])
+        if fresh:
+            d.update({k: old[k] for k in ("comments", "comments_seen", "comments_checked") if k in old})
+        else:
+            d["comments"] = soft(lambda: ig_comments(p["id"], tok), []) if p["comments_count"] else []
+            d["comments_seen"], d["comments_checked"] = p["comments_count"], now
+        return p["id"], d
+
+    # Calls are independent, so run them in parallel (one at a time took ~7 min per update).
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        for pid, d in pool.map(refresh, targets):
+            detail[pid] = d
+    save("ig_metrics.json", IG_OK_METRICS)
     for p in posts:
         p.update(detail.get(p["id"], {}))
     save("ig_detail.json", detail)
@@ -414,26 +434,25 @@ def instagram(page_id, tok):
     reach = soft(lambda: get(f"{ig_id}/insights", tok, metric="reach", period="day").get("data", []), [])
     daily_reach = [{"date": v["end_time"][:10], "value": v["value"]}
                    for d in reach for v in d.get("values", [])]
-    totals = {}
-    for metric in ("reach", "views", "profile_views", "accounts_engaged", "total_interactions",
-                   "likes", "comments", "shares", "saves", "replies", "follows_and_unfollows",
-                   "website_clicks", "profile_links_taps"):
+    def acct(metric, **extra):
         r = soft(lambda: get(f"{ig_id}/insights", tok, metric=metric, period="day",
-                             metric_type="total_value").get("data", []), [])
-        if r:
-            totals[metric] = r[0].get("total_value", {}).get("value")
+                             metric_type="total_value", **extra).get("data", []), [])
+        return metric, (r[0].get("total_value", {}).get("value") if r else None)
+
+    with ThreadPoolExecutor(max_workers=13) as pool:
+        totals = {m: v for m, v in pool.map(acct, (
+            "reach", "views", "profile_views", "accounts_engaged", "total_interactions",
+            "likes", "comments", "shares", "saves", "replies", "follows_and_unfollows",
+            "website_clicks", "profile_links_taps")) if v is not None}
     errors[:] = [e for e in errors if "/insights" not in e]  # unsupported metrics are expected
 
     # Yesterday's full-day totals (KST), shown until our own history covers 24h.
     kst = timezone(timedelta(hours=9))
     midnight = datetime.now(kst).replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday = {}
-    for metric in ("reach", "views", "profile_views", "accounts_engaged"):
-        r = soft(lambda: get(f"{ig_id}/insights", tok, metric=metric, period="day", metric_type="total_value",
-                             since=int((midnight - timedelta(days=1)).timestamp()),
-                             until=int(midnight.timestamp())).get("data", []), [])
-        if r:
-            yesterday[metric] = r[0].get("total_value", {}).get("value")
+    span = {"since": int((midnight - timedelta(days=1)).timestamp()), "until": int(midnight.timestamp())}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        yesterday = {m: v for m, v in pool.map(lambda m: acct(m, **span),
+                                               ("reach", "views", "profile_views", "accounts_engaged")) if v is not None}
     errors[:] = [e for e in errors if "/insights" not in e]
 
     # All-time totals across every post and reel (new posts are included automatically).
@@ -550,8 +569,10 @@ def main():
     else:
         try:
             page_id, page_tok = resolve_page()
-            data["facebook"] = soft(lambda: facebook(page_id, page_tok))
-            data["instagram"] = soft(lambda: instagram(page_id, page_tok))
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                fb = pool.submit(soft, lambda: facebook(page_id, page_tok))
+                ig = pool.submit(soft, lambda: instagram(page_id, page_tok))
+                data["facebook"], data["instagram"] = fb.result(), ig.result()
         except Exception as e:
             errors.append(str(e))
     if TOKEN:

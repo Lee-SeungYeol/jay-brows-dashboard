@@ -39,9 +39,6 @@ jobs:
           META_TOKEN: ${{ secrets.META_TOKEN }}
           PAGE_ID: ${{ vars.PAGE_ID }}
         run: python fetch.py
-      - name: Export CSV
-        continue-on-error: true
-        run: python export.py
       - name: Save history (data branch)
         run: |
           mkdir -p store site/raw && cp store/*.json site/raw/ 2>/dev/null || true
@@ -68,5 +65,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sleep 60
+          # Start the next run 3 minutes after this one started.
+          started=$(date -d "${{ github.run_started_at }}" +%s)
+          wait=$(( 180 - ($(date +%s) - started) ))
+          if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
           gh workflow run update.yml --ref main -R "${{ github.repository }}"
