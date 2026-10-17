@@ -51,45 +51,10 @@ td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
 td.u{font-weight:600;white-space:nowrap}
 td.t{color:var(--muted);white-space:nowrap;font-size:12px}
 .empty{color:var(--muted);padding:30px;text-align:center}
-.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
-.toolbar input,.toolbar select{font:inherit;font-size:14px;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:0}
-.toolbar input{flex:1 1 200px}
-.toolbar select{flex:0 0 auto}
-.toolbar .muted{flex:1 1 100%}
-.ig-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
-@media (max-width:520px){.ig-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
-@media (max-width:340px){.ig-grid{grid-template-columns:minmax(0,1fr)}}
-.igc{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
-.igc.hot{border-color:color-mix(in srgb,var(--ig) 45%,var(--line))}
-.thumb{position:relative;display:block;aspect-ratio:4/5;background:var(--line);overflow:hidden}
-.thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.thumb img.broken{visibility:hidden}
-.badges{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:4px;flex-wrap:wrap;pointer-events:none}
-.bdg{font-size:11px;font-weight:600;line-height:1;padding:5px 7px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;backdrop-filter:blur(4px);white-space:nowrap}
-.bdg.hot{background:var(--ig)}
-.bdg.date{margin-left:auto}
-.igc .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
-.cap{margin:0;font-size:13.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}
-.met{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;font-variant-numeric:tabular-nums}
-.met span{white-space:nowrap}
-.met.sub{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:7px}
-.met.sub b{color:var(--text);font-weight:600}
-.igc .foot{margin-top:auto;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
-.igc .foot a{color:var(--accent);text-decoration:none;white-space:nowrap}
-.igc details{font-size:13px}
-.igc summary{cursor:pointer;color:var(--muted);list-style:none;user-select:none}
-.igc summary::-webkit-details-marker{display:none}
-.igc summary::before{content:"▸ ";}
-.igc details[open] summary::before{content:"▾ ";}
-.clist{max-height:320px;overflow-y:auto;margin-top:6px;padding-right:4px;overscroll-behavior:contain}
 .c{padding:6px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
 .c.r{margin-left:16px;padding-left:8px;border-left:2px solid var(--line);border-top:0}
 .c b{font-weight:600}
 .c small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
-.tag{padding:12px 14px;gap:6px}
-.tag .who{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px}
-.tag .who b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tag .bdg{background:var(--line);color:var(--text);backdrop-filter:none}
 td{overflow-wrap:anywhere}
 @media (max-width:600px){td.u,td.t{white-space:normal}td.u{max-width:34vw}}
 .chgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
@@ -273,15 +238,9 @@ const store = {
   set(k, v) { try { localStorage.setItem("jb:" + k, v); } catch (e) {} }
 };
 const AVG_TIP = "게시물 하나가 평균적으로 받는 반응이에요.<br>게시물당 평균 반응 = (전체 좋아요 + 전체 댓글 + 전체 공유 + 전체 저장) ÷ 전체 게시물 수 (피드+릴스 전부).<br><small>공유·저장은 인사이트가 수집된 게시물 기준 평균이에요.</small>";
-const SUBS = [["FEED", "게시물"], ["REELS", "릴스"], ["TAGGED", "태그·협업"]];
-const SORTS = [["new", "최신순"], ["likes", "좋아요순"], ["comments", "댓글순"], ["reach", "도달순"], ["saved", "저장순"]];
-const PAGE = 30;
-let data, tab = store.get("tab", "instagram"), sub = store.get("sub", "FEED"), sort = store.get("sort", "new"), q = "", shown = PAGE;
-if (!SUBS.some(([k]) => k === sub)) sub = "FEED";
-if (!SORTS.some(([k]) => k === sort)) sort = "new";
+let data, tab = store.get("tab", "instagram");
+try { localStorage.removeItem("jb:sub"); localStorage.removeItem("jb:sort"); } catch (e) {}  // 예전 게시물 목록 설정 정리
 if (tab !== "instagram" && tab !== "facebook") tab = "instagram";
-const openC = new Set();     // 댓글이 펼쳐진 카드 id
-let byId = new Map();        // 현재 목록의 id → 게시물
 
 /* ---------- 페이스북 카드 (기존 그대로) ---------- */
 const LABELS = {reach: "도달", views: "조회", saved: "저장", shares: "공유", replies: "답장",
@@ -312,23 +271,6 @@ const card = (p, extra = "") => `
 
 /* ---------- 인스타그램 카드 ---------- */
 const pid = p => String(p.id || p.url || p.time);
-const I = p => p.insights || {};
-const typeLabel = p => p.kind === "REELS" ? "릴스" : p.type === "CAROUSEL_ALBUM" ? "캐러셀" : p.type === "VIDEO" ? "동영상" : "사진";
-const metric = {
-  new: p => +new Date(p.time || 0),
-  likes: p => p.likes ?? I(p).likes ?? -1,
-  comments: p => p.comments_count ?? I(p).comments ?? -1,
-  reach: p => I(p).reach ?? -1,
-  saved: p => I(p).saved ?? -1,
-};
-const eng = p => (p.likes || 0) + (p.comments_count || 0) + (I(p).saved || 0) + (I(p).shares || 0);
-
-// 상위 10% 기준값 (도달 또는 반응)
-function topCut(list, f) {
-  const v = list.map(f).filter(x => x > 0).sort((a, b) => b - a);
-  return v.length >= 5 ? v[Math.max(0, Math.ceil(v.length * 0.1) - 1)] : Infinity;
-}
-
 /* ---------- 댓글 스레드 (평탄화된 댓글 → 원댓글 + 답글 묶음) ---------- */
 const ownerNames = () => new Set([data?.instagram?.username, data?.facebook?.name, data?.facebook?.username]
   .filter(Boolean).map(s => String(s).toLowerCase()));
@@ -357,7 +299,7 @@ if (!["all", "wait", "done"].includes(cf)) cf = "all";
 function indexThreads() {
   thMap = new Map();
   const d = data && data[tab];
-  if (d) [...(d.posts || []), ...(d.tagged || [])].forEach(p => threadsOf(p).forEach(t => thMap.set(t.id, t)));
+  if (d) (d.posts || []).forEach(p => threadsOf(p).forEach(t => thMap.set(t.id, t)));
 }
 const thBadge = t => t.done ? `<span class="rb ok">답글 완료</span>` : t.replies.length ? `<span class="rb n">답글 ${num(t.replies.length)}</span>` : "";
 const cmtHTML = p => threadsOf(p).map(t =>
@@ -511,68 +453,12 @@ document.addEventListener("click", e => {
 }, true);
 function closeTh() { openTh = null; document.getElementById("cm").classList.remove("on"); document.body.classList.remove("lock"); }
 
-function igCard(p, hot) {
-  const i = I(p), id = pid(p), cs = p.comments || [], open = openC.has(id);
-  const watch = i.ig_reels_avg_watch_time != null ? (i.ig_reels_avg_watch_time / 1000).toFixed(1) + "초" : null;
-  const extra = [["도달", i.reach], ["조회", i.views], ["저장", i.saved], ["공유", i.shares]]
-    .filter(([, v]) => v != null).map(([l, v]) => `<span>${l} <b>${kn(v)}</b></span>`);
-  if (watch) extra.push(`<span>평균 시청 <b>${watch}</b></span>`);
-  return `<article class="igc${hot ? " hot" : ""}">
-    <a class="thumb" href="${esc(p.url)}" target="_blank" rel="noopener">
-      ${p.image ? `<img loading="lazy" decoding="async" referrerpolicy="no-referrer" src="${esc(p.image)}" alt="" onerror="this.classList.add('broken')">` : ""}
-      <div class="badges"><span class="bdg">${typeLabel(p)}</span>${hot ? `<span class="bdg hot">인기</span>` : ""}<span class="bdg date">${day(p.time)}</span></div>
-    </a>
-    <div class="body">
-      <p class="cap">${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
-      <div class="met"><span>♥ ${kn(p.likes ?? i.likes)}</span><span>💬 ${kn(p.comments_count ?? i.comments)}</span></div>
-      ${extra.length ? `<div class="met sub">${extra.join("")}</div>` : ""}
-      ${cs.length ? `<details data-id="${esc(id)}"${open ? " open" : ""}><summary>댓글 ${num(cs.length)}개</summary><div class="clist">${open ? cmtHTML(p) : ""}</div></details>` : ""}
-      <div class="foot"><span class="muted">${when(p.time)}</span><a href="${esc(p.url)}" target="_blank" rel="noopener">원문 →</a></div>
-    </div>
-  </article>`;
-}
-
-const tagCard = (p, hot) => `<article class="igc tag${hot ? " hot" : ""}">
-    <div class="who"><b>@${esc(p.owner)}</b><span class="bdg">${typeLabel(p)} · ${day(p.time)}</span></div>
-    <p class="cap">${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
-    <div class="foot"><div class="met"><span>♥ ${kn(p.likes)}</span><span>💬 ${kn(p.comments_count)}</span>${hot ? `<span class="bdg hot">인기</span>` : ""}</div><a href="${esc(p.url)}" target="_blank" rel="noopener">원문 →</a></div>
-  </article>`;
-
-function igLists(d) {
-  const all = d.posts || [];
-  return {FEED: all.filter(p => p.kind === "FEED"), REELS: all.filter(p => p.kind === "REELS"), TAGGED: d.tagged || []};
-}
-
-function renderList() {
-  const box = document.getElementById("iglist");
-  if (!box || !data || !data.instagram) return;
-  const src = igLists(data.instagram)[sub] || [];
-  const ql = q.trim().toLowerCase();
-  let list = ql ? src.filter(p => (p.text || "").toLowerCase().includes(ql) || (p.owner || "").toLowerCase().includes(ql)) : src.slice();
-  const f = metric[sort];
-  list.sort((a, b) => (f(b) - f(a)) || (metric.new(b) - metric.new(a)));
-  const cutR = topCut(src, p => I(p).reach || 0), cutE = topCut(src, eng);
-  const isHot = p => (I(p).reach || 0) >= cutR || eng(p) >= cutE;
-  byId = new Map(src.map(p => [pid(p), p]));
-  const page = list.slice(0, shown);
-  const noIns = (sort === "reach" || sort === "saved") && !src.some(p => I(p)[sort] != null);
-  document.getElementById("igcount").textContent =
-    `${num(list.length)}개 중 ${num(page.length)}개 표시` + (ql ? ` · "${q.trim()}" 검색` : "") +
-    (noIns ? " · 이 목록에는 아직 인사이트 데이터가 없습니다" : (sort === "reach" || sort === "saved") ? " · 인사이트 없는 항목은 뒤로" : "");
-  box.innerHTML = page.length
-    ? `<div class="ig-grid">${page.map(p => sub === "TAGGED" ? tagCard(p, isHot(p)) : igCard(p, isHot(p))).join("")}</div>` +
-      (list.length > page.length ? `<button class="more" data-more="1">더 보기 (${num(list.length - page.length)}개 남음)</button>` : "")
-    : `<div class="card empty">${ql ? "검색 결과가 없습니다." : "아직 없습니다."}</div>`;
-}
-
 /* ---------- 전체 화면 ---------- */
 function render() {
   document.querySelectorAll(".tabs button[data-k]").forEach(b => b.classList.toggle("on", b.dataset.k === tab));
   document.documentElement.style.setProperty("--accent", tab === "instagram" ? "var(--ig)" : "var(--fb)");
   const d = data[tab], v = document.getElementById("view");
   if (!d) { v.innerHTML = `<div class="card empty">아직 데이터가 없습니다. 토큰 연결 후 표시됩니다.</div>`; return; }
-  // 검색창 포커스/커서 보존
-  const ae = document.activeElement, focusQ = ae && ae.id === "igq", sel = focusQ ? [ae.selectionStart, ae.selectionEnd] : null;
   const isIG = tab === "instagram";
   const all_posts = d.posts || [];
   const posts = isIG ? all_posts.filter(p => p.kind === "FEED") : all_posts;
@@ -619,26 +505,11 @@ function render() {
   if (isIG) h += topGrowthHTML(d) + `<div id="tcbox">${topCmHTML(d)}</div>`;
   if (isIG) h += hourlyHTML(d);
 
-  if (isIG) {
-    const lists = igLists(d);
-    h += `<div class="tabs sub">` + SUBS.map(([k, l]) =>
-      `<button data-s="${k}" class="${k === sub ? "on" : ""}">${l} (${lists[k].length})</button>`).join("") + `</div>`;
-    h += `<div class="toolbar">
-        <input id="igq" type="search" placeholder="${sub === "TAGGED" ? "캡션·계정 검색" : "캡션 검색"}" value="${esc(q)}" autocomplete="off">
-        <select id="igsort" aria-label="정렬">${SORTS.map(([k, l]) => `<option value="${k}"${k === sort ? " selected" : ""}>${l}</option>`).join("")}</select>
-        <span class="muted" id="igcount"></span>
-      </div><div id="iglist"></div>`;
-  } else {
-    h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
-  }
+  if (!isIG) h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
   v.innerHTML = h;
   thList();
   if (openTh) showTh(openTh);
-  if (isIG) {
-    drawCharts();
-    renderList();
-    if (focusQ) { const el = document.getElementById("igq"); el.focus(); try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} }
-  }
+  if (isIG) drawCharts();
 }
 
 /* ---------- 최근 1시간 조회수 급상승 TOP 10 (instagram.top_growth: 최근 60분 동안의 조회수 증가량) ---------- */
@@ -836,11 +707,9 @@ document.addEventListener("click", e => {
   if (tcu) { tcToggle(tcu.dataset.tcu); return; }
   const th = e.target.closest("[data-th]");
   if (th) { showTh(th.dataset.th); return; }
-  if (e.target.closest("button[data-more]")) { shown += PAGE; renderList(); return; }
-  const b = e.target.closest("button[data-k],button[data-s]");
+  const b = e.target.closest("button[data-k]");
   if (!b) return;
-  if (b.dataset.k) { tab = b.dataset.k; store.set("tab", tab); }
-  else if (b.dataset.s !== sub) { sub = b.dataset.s; shown = PAGE; store.set("sub", sub); }
+  tab = b.dataset.k; store.set("tab", tab);
   render();
 });
 document.addEventListener("keydown", e => {
@@ -848,34 +717,11 @@ document.addEventListener("keydown", e => {
   if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-tcu]")) { e.preventDefault(); tcToggle(e.target.dataset.tcu); return; }
   if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-th]")) { e.preventDefault(); showTh(e.target.dataset.th); }
 });
-document.addEventListener("input", e => {
-  if (e.target.id !== "igq") return;
-  q = e.target.value; shown = PAGE; renderList();
-});
-document.addEventListener("change", e => {
-  if (e.target.id !== "igsort") return;
-  sort = e.target.value; shown = PAGE; store.set("sort", sort); renderList();
-});
-// 댓글 펼침 상태 기억 + 펼칠 때만 댓글 렌더 (toggle은 버블링되지 않아 capture 사용)
-document.addEventListener("toggle", e => {
-  const dt = e.target;
-  if (!(dt instanceof HTMLDetailsElement) || !dt.dataset.id) return;
-  const id = dt.dataset.id;
-  if (dt.open) {
-    openC.add(id);
-    const box = dt.querySelector(".clist"), p = byId.get(id);
-    if (box && p && !box.innerHTML) box.innerHTML = cmtHTML(p);
-  } else openC.delete(id);
-}, true);
-
 const load = () => fetch("data.json?" + Date.now()).then(r => r.json()).then(j => {
   data = j;
   document.getElementById("updated").textContent = "업데이트: " + new Date(j.updated).toLocaleString("ko-KR");
   document.getElementById("errors").innerHTML = !(j.errors && j.errors.length) ? "" : `<div class="warn">일부 데이터를 가져오지 못했습니다<ul>${j.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>`;
-  // 새로고침 시 열린 댓글창 스크롤 위치 보존
-  const scr = {}; document.querySelectorAll("details[data-id][open] .clist").forEach(el => { scr[el.parentNode.dataset.id] = el.scrollTop; });
   render();
-  document.querySelectorAll("details[data-id][open] .clist").forEach(el => { const s = scr[el.parentNode.dataset.id]; if (s) el.scrollTop = s; });
 }).catch(() => { document.getElementById("view").innerHTML = `<div class="card empty">data.json을 불러오지 못했습니다.</div>`; });
 load();
 setInterval(load, 60000);  // 1분마다 새 데이터 확인

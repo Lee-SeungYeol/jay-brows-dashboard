@@ -625,19 +625,6 @@ def instagram(page_id, tok):
         if p.get("insights"):
             p["insights"] = {**p["insights"], "views": v}
 
-    # Posts other accounts tagged us in (most collab posts we don't own show up here).
-    # The full list is slow (API only allows small pages), so refresh it hourly.
-    tag_cache = load("ig_tagged.json", {"t": "", "rows": []})
-    if tag_cache["t"][:13] != now[:13] or not tag_cache["rows"]:
-        rows = soft(lambda: paged(
-            f"{ig_id}/tags", tok, 2000, limit=10,
-            fields="id,username,caption,media_type,permalink,timestamp,like_count,comments_count",
-        ), None)
-        if rows is not None:
-            tag_cache = {"t": now, "rows": rows}
-            save("ig_tagged.json", tag_cache)
-    tagged = tag_cache["rows"]
-
     # Account-level insights.
     reach = soft(lambda: get(f"{ig_id}/insights", tok, metric="reach", period="day").get("data", []), [])
     daily_reach = [{"date": v["end_time"][:10], "value": v["value"]}
@@ -750,11 +737,6 @@ def instagram(page_id, tok):
         "hourly_views": hourly,
         "follower_history": hist,
         "posts": posts,
-        "tagged": [{
-            "id": m["id"], "owner": m.get("username", ""), "text": m.get("caption", ""),
-            "time": m.get("timestamp"), "url": m.get("permalink"), "type": m.get("media_type"),
-            "likes": m.get("like_count", 0), "comments_count": m.get("comments_count", 0),
-        } for m in tagged],
     }
 
 
