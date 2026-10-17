@@ -161,9 +161,6 @@ td{overflow-wrap:anywhere}
 .ic .m b{font-weight:600;margin-right:5px}
 .ic .m small{display:block;color:var(--muted);font-size:12px;margin-top:3px}
 .ic.me .m{background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:10px;padding:6px 9px}
-.iglk{display:block;text-align:center;margin:4px 0 10px 42px;padding:10px 12px;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;text-decoration:none}
-.iglk.pend{background:var(--line);color:var(--text);font-weight:500}
-.iglk.sm{display:inline-block;margin:2px 0 0;padding:0;background:none;color:var(--accent);font-size:12px;font-weight:500}
 .atag{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--accent);color:#fff;margin-right:5px;vertical-align:1px}
 @media (max-width:600px){#cm{padding:0;align-items:flex-end}#cm .sh{width:100%;max-height:none;height:94vh;border-radius:16px 16px 0 0}}
 body.lock{overflow:hidden}
@@ -357,18 +354,6 @@ const icHTML = (c, rp, extra = "", tk) => { const me = isOwner(c.user), u = Stri
   if (c._sent) extra += `<span class="sent">전송됨</span>`;
   return `<div class="ic${rp ? " rp" : ""}${me ? " me" : ""}${tk != null && rpOn() && rpS.key === tk ? " tg" : ""}"><span class="av" style="background:${me ? "var(--accent)" : avColor(u)}">${esc(([...u.replace(/^[@._]+/, "")][0] || "?").toUpperCase())}</span>
     <div class="m">${me ? `<span class="atag">작성자</span>` : ""}<b>${esc(u)}</b>${esc(c.text)}<small>${rel(c.time)} · ${when(c.time)}${c.likes ? ` · ♥ ${num(c.likes)}` : ""}</small>${extra}</div></div>`; };
-/* 인스타 댓글 딥링크: /p/SHORTCODE/c/COMMENT_ID/ (답글은 /c/PARENT/r/REPLY/) */
-const igShort = u => (String(u || "").match(/instagram\.com\/(?:[^\/?#]+\/)?(?:p|reel|reels|tv)\/([^\/?#]+)/) || [])[1];
-const igLink = (p, c, parent) => { const sc = igShort(p.url);
-  if (!sc || !c.id || (parent !== undefined && !parent)) return null;
-  return `https://www.instagram.com/p/${sc}/c/${parent ? `${parent}/r/${c.id}` : c.id}/`; };
-const igBtn = t => { if (tab !== "instagram") return "";
-  const u = igLink(t.post, t.root);
-  return u ? `<a class="iglk" href="${esc(u)}" target="_blank" rel="noopener">인스타에서 이 댓글에 답글 달기 →</a>`
-    : t.post.url ? `<a class="iglk pend" href="${esc(t.post.url)}" target="_blank" rel="noopener">게시물 열기 (댓글 위치 정보 수집 중)</a>` : ""; };
-const igRp = (t, r) => { if (tab !== "instagram") return "";
-  const u = igLink(t.post, r, r.parent || t.root.id);
-  return u ? `<a class="iglk sm" href="${esc(u)}" target="_blank" rel="noopener">답글로 이동 →</a>` : ""; };
 function showTh(id) {
   const t = thMap.get(id), m = document.getElementById("cm");
   if (!t) { closeTh(); return; }
@@ -378,7 +363,7 @@ function showTh(id) {
     <button class="x" data-cmx="1" aria-label="닫기">✕</button>`;
   if (openTh !== id) rpReset(t);
   const sent = pendingSent(t);
-  bd.innerHTML = icHTML(t.root, false, "", t.root.id ? "r" : null) + igBtn(t) + t.replies.map((r, i) => icHTML(r, true, igRp(t, r), t.root.id ? String(i) : null)).join("")
+  bd.innerHTML = icHTML(t.root, false, "", t.root.id ? "r" : null) + t.replies.map((r, i) => icHTML(r, true, "", t.root.id ? String(i) : null)).join("")
     + sent.map(r => icHTML(r, true)).join("");
   bd.scrollTop = keep;
   rpBox(t, openTh !== id);
