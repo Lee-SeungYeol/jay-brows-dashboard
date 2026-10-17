@@ -377,12 +377,13 @@ function drawChart(c) {
   if (!box || !data || !data.instagram) return;
   const dec = c.dec || 0, {pts} = chartPoints(c.key, dec);
   box._pts = pts; box._c = c;
-  if (pts.length < 2) { box.innerHTML = `<div class="msg">데이터 수집 중 — 업데이트마다(약 3분) 한 점씩 쌓입니다</div>`; sum.textContent = ""; box._geo = null; return; }
+  if (!pts.length) { box.innerHTML = `<div class="msg">데이터 수집 중 — 업데이트마다(약 3분) 한 점씩 쌓입니다</div>`; sum.textContent = ""; box._geo = null; return; }
   const total = +pts.reduce((a, p) => a + p.d, 0).toFixed(dec), mx = pts.reduce((a, p) => p.d > a.d ? p : a, pts[0]);
   sum.innerHTML = `선택 기간 합계 <b>${sgn(total, dec)}</b> · 최대 증가 ${mx.d > 0 ? `<b>${sgn(mx.d, dec)}</b> (${hhmm(mx.ts)})` : "없음"}`;
   const W = Math.max(260, box.clientWidth), H = W < 480 ? 190 : 220;
   const L = dec ? 46 : 40, R = 10, TP = 10, B = 24, pw = W - L - R, ph = H - TP - B;
-  const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts, span = Math.max(1, t1 - t0);
+  // 점이 적을 때도 보이도록 최소 15분 폭으로 그림
+  const t1 = pts[pts.length - 1].ts, t0 = Math.min(pts[0].ts, t1 - 15 * 6e4), span = Math.max(1, t1 - t0);
   let lo = Math.min(0, ...pts.map(p => p.d)), hi = Math.max(0, ...pts.map(p => p.d));
   const minStep = Math.pow(10, -dec);
   if (lo === hi) { hi += minStep; lo -= minStep; }
