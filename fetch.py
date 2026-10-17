@@ -469,6 +469,51 @@ def ig_growth(posts, views, last, now):
     return out, meta
 
 
+DAILY_KEYS = ("reach", "views", "profile_views", "accounts_engaged")
+DELTA_KEYS = ("followers", "likes", "comments", "shares", "saves", "avg_reaction", "avg_likes",
+              "avg_views", "views_total", "posts") + DAILY_KEYS
+DELTA_WINDOW_MIN = 60
+
+
+def ig_hour_delta(runs, row):
+    """Badge changes over a rolling hour: value now minus the newest run at least 60 min old
+    (or the oldest run available while history is shorter). Per key, only runs that have it count."""
+    kst = timezone(timedelta(hours=9))
+    tnow = datetime.fromisoformat(row["t"])
+    cutoff = tnow - timedelta(minutes=DELTA_WINDOW_MIN)
+    past = sorted((r for r in runs[:-1] if r.get("t")), key=lambda r: datetime.fromisoformat(r["t"]))
+    if not past:
+        return None
+    day = tnow.astimezone(kst).date().isoformat()
+
+    def base_for(k):
+        have = [r for r in past if r.get(k) is not None]
+        if not have:
+            return None
+        old = [r for r in have if datetime.fromisoformat(r["t"]) <= cutoff]
+        return old[-1] if old else have[0]
+
+    delta, since = {}, None
+    for k in DELTA_KEYS:
+        if row.get(k) is None:
+            continue
+        b = base_for(k)
+        if b is None:
+            continue
+        if k in DAILY_KEYS and datetime.fromisoformat(b["t"]).astimezone(kst).date().isoformat() != day:
+            continue  # daily metrics reset at midnight KST
+        if k in ("shares", "saves", "avg_reaction") and b.get("coverage") != row.get("coverage"):
+            continue  # insight coverage changed in the window: totals moved by themselves
+        delta[k] = round(row[k] - b[k], 2)
+        if since is None or b["t"] < since:
+            since = b["t"]
+    if since is None:
+        return None
+    delta["since"] = since
+    delta["window_min"] = round((tnow - datetime.fromisoformat(since)).total_seconds() / 60, 1)
+    return delta
+
+
 def ig_media_row(m):
     kind = "REELS" if m.get("media_product_type") == "REELS" else "FEED"
     return {
@@ -633,33 +678,17 @@ def instagram(page_id, tok):
     cur["avg_views"] = avg_views
     top_growth, top_meta = ig_growth(posts, views, last, now)
     top_meta.update({"views_fetched": len(views), "views_seconds": views_sec})
-    delta = None
-    if last:
-        delta = {"since": last["t"]}
-        for k, v in cur.items():
-            if v is None or last["values"].get(k) is None:
-                continue
-            if k in ("reach", "views", "profile_views", "accounts_engaged") and last.get("day") != day:
-                continue  # daily metrics reset at midnight
-            delta[k] = round(v - last["values"][k], 2)
-        both = [i for i in cur_posts if i in last.get("posts", {})]
-        delta["shares"] = sum(cur_posts[i][0] - last["posts"][i][0] for i in both)
-        delta["saves"] = sum(cur_posts[i][1] - last["posts"][i][1] for i in both)
-        # Insight coverage growing would move the average by itself; when no post was added,
-        # use only real new reactions instead.
-        n_posts = totals_all["posts"]
-        if n_posts and last["values"].get("posts") == n_posts and "likes" in delta and "comments" in delta:
-            delta["avg_reaction"] = round(
-                (delta["likes"] + delta["comments"] + delta["shares"] + delta["saves"]) / n_posts, 2)
     save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts, "views": views_store})
 
     # Per-update series for the charts (one point per run, ~every 3 min; kept forever).
     runs = load("ig_runs.json", [])
-    runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
-                 "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
-                 "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"],
-                 "views_total": views_total, "avg_views": avg_views,
-                 "avg_likes": totals_all["avg_likes"]})
+    row = {"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
+           "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
+           "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"],
+           "views_total": views_total, "avg_views": avg_views, "avg_likes": totals_all["avg_likes"]}
+    row.update({k: totals.get(k) for k in DAILY_KEYS})
+    runs.append(row)
+    delta = ig_hour_delta(runs, row)
     save("ig_runs.json", runs)
 
     hist = load("ig_followers.json", [])
