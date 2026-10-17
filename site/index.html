@@ -122,6 +122,46 @@ td{overflow-wrap:anywhere}
 .fchart .ctip .up{color:var(--up)}.fchart .ctip .dn{color:var(--dn)}.fchart .ctip .zz{opacity:.7}
 .fchart .msg{color:var(--muted);text-align:center;padding:30px 10px;font-size:14px}
 .more{display:block;margin:16px auto 0;font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 22px;border-radius:999px;cursor:pointer}
+/* 댓글 스레드 + 모달 */
+.cf{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.cf button{border:1px solid var(--line);background:var(--card);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}
+.cf button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.thr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 6px;border-top:1px solid var(--line);cursor:pointer;overflow-wrap:anywhere;border-radius:6px}
+.thr:first-child{border-top:0}
+.thr:hover,.thr:focus-visible{background:color-mix(in srgb,var(--text) 5%,transparent);outline:none}
+.thr .hd{font-size:14px;min-width:0}
+.thr .hd b{font-weight:600;margin-right:6px}
+.thr .tt{color:var(--muted);font-size:12px;white-space:nowrap;text-align:right}
+.thr .tx{grid-column:1/-1;font-size:14px}
+.thr .pc{grid-column:1/-1;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rb{display:inline-block;font-size:11px;font-weight:600;line-height:1;padding:4px 7px;border-radius:999px;vertical-align:1px;white-space:nowrap;margin-right:4px}
+.rb.ok{background:#dcfce7;color:#15803d}
+.rb.n{background:var(--line);color:var(--muted)}
+@media (prefers-color-scheme:dark){.rb.ok{background:#14532d;color:#86efac}}
+.c.th{cursor:pointer}
+.c.th:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}
+#cm{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:20px}
+#cm.on{display:flex}
+#cm .sh{background:var(--card);color:var(--text);border-radius:16px;width:min(520px,100%);max-height:min(86vh,760px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+#cm .top{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+#cm .top img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--line);flex:none}
+#cm .top .cp{flex:1;min-width:0;font-size:13px}
+#cm .top .cp p{margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+#cm .top a{color:var(--accent);text-decoration:none;font-size:12.5px}
+#cm .x{flex:none;border:0;background:none;color:var(--text);font-size:20px;line-height:1;width:36px;height:36px;border-radius:50%;cursor:pointer}
+#cm .x:hover{background:var(--line)}
+#cm .bd{overflow-y:auto;padding:6px 14px 16px;overscroll-behavior:contain}
+.ic{display:flex;gap:10px;padding:10px 0}
+.ic.rp{margin-left:42px;padding:6px 0}
+.av{flex:none;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff}
+.ic.rp .av{width:26px;height:26px;font-size:11px}
+.ic .m{flex:1;min-width:0;font-size:14px;overflow-wrap:anywhere}
+.ic .m b{font-weight:600;margin-right:5px}
+.ic .m small{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+.ic.me .m{background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:10px;padding:6px 9px}
+.atag{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--accent);color:#fff;margin-right:5px;vertical-align:1px}
+@media (max-width:600px){#cm{padding:0;align-items:flex-end}#cm .sh{width:100%;max-height:none;height:94vh;border-radius:16px 16px 0 0}}
+body.lock{overflow:hidden}
 </style>
 </head>
 <body>
@@ -137,6 +177,7 @@ td{overflow-wrap:anywhere}
   <div id="errors"></div>
   <div id="view"></div>
 </main>
+<div id="cm" role="dialog" aria-modal="true" aria-label="댓글 스레드"><div class="sh"><div class="top" id="cmtop"></div><div class="bd" id="cmbd"></div></div></div>
 <script>
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = n => n == null ? "–" : Number(n).toLocaleString("ko-KR");
@@ -187,7 +228,7 @@ const card = (p, extra = "") => `
         <span class="muted">${extra}${when(p.time)}</span>
         <p>${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
         <div class="nums">${p.likes != null ? `<span>♥ ${num(p.likes)}</span>` : ""}${p.comments_count != null ? `<span>💬 ${num(p.comments_count)}</span>` : ""}${typeof p.shares === "number" ? `<span>↗ ${num(p.shares)}</span>` : ""}${ins(p)}</div>
-        ${(p.comments || []).length ? `<details><summary>댓글 보기 (${p.comments.length})</summary>${p.comments.map(c => `<div class="cmt"><b>${who(c)}</b> ${esc(c.text)}</div>`).join("")}</details>` : ""}
+        ${(p.comments || []).length ? `<details><summary>댓글 보기 (${p.comments.length})</summary>${cmtHTML(p)}</details>` : ""}
         <a href="${esc(p.url)}" target="_blank" rel="noopener">원문 보기 →</a>
       </div>
     </div>`;
@@ -211,8 +252,72 @@ function topCut(list, f) {
   return v.length >= 5 ? v[Math.max(0, Math.ceil(v.length * 0.1) - 1)] : Infinity;
 }
 
-const cmtHTML = p => (p.comments || []).map(c =>
-  `<div class="c${c.reply ? " r" : ""}"><b>${esc(c.user)}</b> ${esc(c.text)}<small>${when(c.time)}${c.likes ? ` · ♥ ${num(c.likes)}` : ""}</small></div>`).join("");
+/* ---------- 댓글 스레드 (평탄화된 댓글 → 원댓글 + 답글 묶음) ---------- */
+const ownerNames = () => new Set([data?.instagram?.username, data?.facebook?.name, data?.facebook?.username]
+  .filter(Boolean).map(s => String(s).toLowerCase()));
+const isOwner = u => !!u && ownerNames().has(String(u).toLowerCase());
+const ts = t => +new Date(t || 0) || 0;
+function threadsOf(p) {
+  const cs = p.comments || [], out = [], byCid = new Map(), base = pid(p);
+  let cur = null;
+  cs.forEach((c, i) => {
+    const par = c.reply && c.parent ? byCid.get(c.parent) : null;
+    if (c.reply && (par || cur)) { (par || cur).replies.push(c); return; }
+    cur = {id: base + "#" + (c.id || i), post: p, root: c, replies: []};
+    if (c.id) byCid.set(c.id, cur);
+    out.push(cur);
+  });
+  out.forEach(t => {
+    t.mine = isOwner(t.root.user);
+    t.done = t.replies.some(r => isOwner(r.user));
+    t.last = Math.max(ts(t.root.time), ...t.replies.map(r => ts(r.time)));
+  });
+  return out;
+}
+let thMap = new Map(), cf = store.get("cf", "all"), cShown = 100, openTh = null;
+if (!["all", "wait", "done"].includes(cf)) cf = "all";
+function indexThreads() {
+  thMap = new Map();
+  const d = data && data[tab];
+  if (d) [...(d.posts || []), ...(d.tagged || [])].forEach(p => threadsOf(p).forEach(t => thMap.set(t.id, t)));
+}
+const thBadge = t => t.done ? `<span class="rb ok">답글 완료</span>` : t.replies.length ? `<span class="rb n">답글 ${num(t.replies.length)}</span>` : "";
+const cmtHTML = p => threadsOf(p).map(t =>
+  `<div class="c th" data-th="${esc(t.id)}" tabindex="0" role="button"><b>${esc(t.root.user)}</b> ${thBadge(t)}${esc(t.root.text)}<small>${when(t.root.time)}${t.root.likes ? ` · ♥ ${num(t.root.likes)}` : ""}${t.done ? ` · 답글 ${num(t.replies.length)}` : ""}</small></div>`).join("");
+function thList() {
+  const box = document.getElementById("thlist");
+  if (!box) return;
+  const all = [...thMap.values()].sort((a, b) => b.last - a.last);
+  const wait = all.filter(t => !t.done && !t.mine), done = all.filter(t => t.done);
+  const list = cf === "wait" ? wait : cf === "done" ? done : all, page = list.slice(0, cShown);
+  document.getElementById("cfbar").innerHTML = [["all", "전체", all.length], ["wait", "답글 대기", wait.length], ["done", "답글 완료", done.length]]
+    .map(([k, l, n]) => `<button data-cf="${k}" class="${k === cf ? "on" : ""}">${l} ${num(n)}</button>`).join("");
+  box.innerHTML = page.length ? page.map(t => `<div class="thr" data-th="${esc(t.id)}" tabindex="0" role="button">
+      <div class="hd"><b>${esc(t.root.user)}</b>${thBadge(t)}</div><span class="tt">${when(t.last)}</span>
+      <div class="tx">${esc(t.root.text)}</div>
+      <div class="pc">${esc((t.post.text || "(내용 없음)").slice(0, 60))}</div></div>`).join("") +
+      (list.length > page.length ? `<button class="more" data-cmore="1">더 보기 (${num(list.length - page.length)}개 남음)</button>` : "")
+    : `<div class="empty">${cf === "all" ? "댓글이 없습니다." : "해당하는 댓글이 없습니다."}</div>`;
+}
+const rel = t => { const s = (Date.now() - ts(t)) / 1000;
+  return s < 60 ? "방금" : s < 3600 ? Math.floor(s / 60) + "분 전" : s < 86400 ? Math.floor(s / 3600) + "시간 전" : s < 86400 * 7 ? Math.floor(s / 86400) + "일 전" : s < 86400 * 365 ? Math.floor(s / 86400 / 7) + "주 전" : Math.floor(s / 86400 / 365) + "년 전"; };
+const avColor = u => { let h = 0; for (const ch of String(u)) h = (h * 31 + ch.codePointAt(0)) % 360; return `hsl(${h} 50% 46%)`; };
+const icHTML = (c, rp) => { const me = isOwner(c.user), u = String(c.user || "?");
+  return `<div class="ic${rp ? " rp" : ""}${me ? " me" : ""}"><span class="av" style="background:${me ? "var(--accent)" : avColor(u)}">${esc(([...u.replace(/^[@._]+/, "")][0] || "?").toUpperCase())}</span>
+    <div class="m">${me ? `<span class="atag">작성자</span>` : ""}<b>${esc(u)}</b>${esc(c.text)}<small>${rel(c.time)} · ${when(c.time)}${c.likes ? ` · ♥ ${num(c.likes)}` : ""}</small></div></div>`; };
+function showTh(id) {
+  const t = thMap.get(id), m = document.getElementById("cm");
+  if (!t) { closeTh(); return; }
+  const bd = document.getElementById("cmbd"), keep = openTh === id && m.classList.contains("on") ? bd.scrollTop : 0, p = t.post;
+  document.getElementById("cmtop").innerHTML = `${p.image ? `<img src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : ""}
+    <div class="cp"><p>${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">원문 보기 →</a>` : ""}</div>
+    <button class="x" data-cmx="1" aria-label="닫기">✕</button>`;
+  bd.innerHTML = icHTML(t.root) + t.replies.map(r => icHTML(r, true)).join("");
+  bd.scrollTop = keep;
+  if (!m.classList.contains("on")) { m.classList.add("on"); document.body.classList.add("lock"); m.querySelector(".x").focus({preventScroll: true}); }
+  openTh = id;
+}
+function closeTh() { openTh = null; document.getElementById("cm").classList.remove("on"); document.body.classList.remove("lock"); }
 
 function igCard(p, hot) {
   const i = I(p), id = pid(p), cs = p.comments || [], open = openC.has(id);
@@ -316,11 +421,8 @@ function render() {
   if (isIG) h += `<h2>업데이트별 추이</h2><div class="chwin" role="group" aria-label="차트 기간">${WINS.map(w => `<button data-w="${w}" class="${w === win ? "on" : ""}">${w}시간</button>`).join("")}</div>` +
     `<div class="chgrid">${CHARTS.map(c => `<div class="card chcard"><h3${c.tip ? ` class="has-tip" tabindex="0"` : ""}>${c.title}${c.tip ? ` <i class="q">?</i><div class="tip">${c.tip}</div>` : ""}</h3><div class="chsum" id="${c.id}-sum"></div><div class="fchart" id="${c.id}"></div></div>`).join("")}</div>`;
 
-  const all = all_posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
-    .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 100);
-  h += `<h2>최근 댓글 (${all.length})</h2><div class="card">` + (all.length
-    ? `<table>${all.map(c => `<tr><td class="u">${who(c)}</td><td>${esc(c.text)}</td><td class="t"><a href="${esc(c.post.url)}" target="_blank" rel="noopener">${when(c.time)}</a></td></tr>`).join("")}</table>`
-    : `<div class="empty">댓글이 없습니다.</div>`) + `</div>`;
+  indexThreads();
+  h += `<h2>최근 댓글</h2><div class="cf" id="cfbar" role="group" aria-label="댓글 필터"></div><div class="card" id="thlist"></div>`;
 
   if (isIG) {
     const lists = igLists(d);
@@ -335,6 +437,8 @@ function render() {
     h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
   }
   v.innerHTML = h;
+  thList();
+  if (openTh) showTh(openTh);
   if (isIG) {
     drawCharts();
     renderList();
@@ -461,12 +565,22 @@ document.addEventListener("click", e => {
   const st = e.target.closest(".has-tip");
   document.querySelectorAll(".has-tip.show").forEach(x => { if (x !== st) x.classList.remove("show"); });
   if (st) { st.classList.toggle("show"); return; }
+  if (e.target.closest("[data-cmx]") || e.target.id === "cm") { closeTh(); return; }
+  const cb = e.target.closest("button[data-cf]");
+  if (cb) { cf = cb.dataset.cf; cShown = 100; store.set("cf", cf); thList(); return; }
+  if (e.target.closest("button[data-cmore]")) { cShown += 100; thList(); return; }
+  const th = e.target.closest("[data-th]");
+  if (th) { showTh(th.dataset.th); return; }
   if (e.target.closest("button[data-more]")) { shown += PAGE; renderList(); return; }
   const b = e.target.closest("button[data-k],button[data-s]");
   if (!b) return;
   if (b.dataset.k) { tab = b.dataset.k; store.set("tab", tab); }
   else if (b.dataset.s !== sub) { sub = b.dataset.s; shown = PAGE; store.set("sub", sub); }
   render();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && openTh) { closeTh(); return; }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-th]")) { e.preventDefault(); showTh(e.target.dataset.th); }
 });
 document.addEventListener("input", e => {
   if (e.target.id !== "igq") return;
