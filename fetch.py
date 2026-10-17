@@ -283,11 +283,22 @@ def instagram(page_id, tok):
             yesterday[metric] = r[0].get("total_value", {}).get("value")
     errors[:] = [e for e in errors if "/insights" not in e]
 
+    # All-time totals across every post and reel (new posts are included automatically).
+    # Shares/saves come from per-post insights, so they cover posts checked so far.
+    with_ins = [p for p in posts if p.get("insights")]
+    totals_all = {
+        "posts": len(posts),
+        "likes": sum(p["likes"] or 0 for p in posts),
+        "comments": sum(p["comments_count"] or 0 for p in posts),
+        "shares": sum(p["insights"].get("shares") or 0 for p in with_ins),
+        "saves": sum(p["insights"].get("saved") or 0 for p in with_ins),
+        "insights_coverage": len(with_ins),
+    }
+
     # Hourly snapshot of the headline numbers; the page diffs against ~24h ago.
-    feed = [p for p in posts if p["kind"] == "FEED"][:POST_LIMIT]
     snap = {"t": now, "followers": prof.get("followers_count"), "follows": prof.get("follows_count"),
-            "media": prof.get("media_count"),
-            "r_likes": sum(p["likes"] or 0 for p in feed), "r_comments": sum(p["comments_count"] or 0 for p in feed)}
+            "media": prof.get("media_count"), "likes": totals_all["likes"], "comments": totals_all["comments"],
+            "shares": totals_all["shares"], "saves": totals_all["saves"]}
     snap.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
     hist = load("ig_followers.json", [])
     if not hist or hist[-1]["t"][:13] != now[:13]:
@@ -304,6 +315,7 @@ def instagram(page_id, tok):
         "daily_reach": daily_reach,
         "today": totals,
         "yesterday": yesterday,
+        "totals": totals_all,
         "follower_history": hist,
         "posts": posts,
         "stories": story_list,
