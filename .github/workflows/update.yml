@@ -69,4 +69,7 @@ jobs:
           started=$(date -d "${{ github.run_started_at }}" +%s)
           wait=$(( 180 - ($(date +%s) - started) ))
           if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
-          gh workflow run update.yml --ref main -R "${{ github.repository }}"
+          # Only one chain: skip if another run is already queued or running.
+          busy=$(gh run list -R "${{ github.repository }}" --workflow update.yml --json status,databaseId \
+            -q '[.[] | select((.status=="queued" or .status=="in_progress" or .status=="waiting") and .databaseId != ${{ github.run_id }})] | length')
+          if [ "$busy" = "0" ]; then gh workflow run update.yml --ref main -R "${{ github.repository }}"; fi
