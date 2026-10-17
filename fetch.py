@@ -16,7 +16,7 @@ API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
 TOKEN = os.environ.get("META_TOKEN", "").strip()
 POST_LIMIT = int(os.environ.get("POST_LIMIT", "25"))
 COMMENT_LIMIT = int(os.environ.get("COMMENT_LIMIT", "300"))
-LEVEL_STRONG, LEVEL_MID = 1_000_000, 500_000  # 조회수 급상승 level by total views: 강함 ≥ 1M, 보통 ≥ 500K
+LEVEL_STRONG, LEVEL_MID = 1000, 500  # 조회수 급상승 level by cumulative reactions (likes+comments+shares+saved)
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "data.json")
 
 errors = []
@@ -436,15 +436,19 @@ def ig_growth(posts, views, last, now):
     grow = sorted(r["dv"] for r in rows if r["dv"] > 0)
     n = len(grow)
 
-    def level(v):
-        return "강함" if v >= LEVEL_STRONG else "보통" if v >= LEVEL_MID else "낮음"
+    def reactions(p):
+        ins = p.get("insights") or {}
+        return sum(int(x or 0) for x in (p.get("likes"), p.get("comments_count"), ins.get("shares"), ins.get("saved")))
+
+    def level(n):
+        return "강함" if n >= LEVEL_STRONG else "보통" if n >= LEVEL_MID else "약함"
 
     top = sorted((r for r in rows if r["dv"] > 0), key=lambda r: (r["dv"], r["rate"] or 0), reverse=True)[:10]
     out = [{
         "id": r["p"]["id"], "kind": r["p"]["kind"], "type": r["p"]["type"],
         "text": (r["p"].get("text") or "")[:80], "url": r["p"]["url"], "image": r["p"]["image"],
         "time": r["p"]["time"], "views": r["views"], "views_prev": r["views_prev"], "dv": r["dv"],
-        "rate": r["rate"], "level": level(r["views"]),
+        "rate": r["rate"], "reactions": reactions(r["p"]), "level": level(reactions(r["p"])),
     } for r in top]
     median = None
     if n:
