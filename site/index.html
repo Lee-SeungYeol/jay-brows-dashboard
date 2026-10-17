@@ -818,15 +818,26 @@ setInterval(load, 60000);  // 1분마다 새 데이터 확인
 const HV_TIP = "하루를 1시간 단위로 나눠, 각 시간대에 전체 게시물(피드+릴스) 조회수가 평균 얼마나 늘었는지 보여줘요. 날이 쌓일수록 정확해져요.";
 let hvSel = null;  // 선택한 시간 — 1분 새로고침 후에도 유지
 const hvR = i => `${i}~${i + 1}시`;
+// 표시값: 지난 날들의 평균. 지금 시간은 오늘 진행 중인 증가량을 하루치로 포함해 (합 + 진행 중) / (일수 + 1)
+function hvVals(H) {
+  const a = (H.avg || []).slice(), n = (H.n || []).slice(), cur = H.current_hour, sf = H.current_hour_so_far;
+  if (cur != null && sf != null) {
+    const hh = String(cur).padStart(2, "0");
+    const g = Object.values(H.days || {}).map(v => v[hh]).filter(x => x != null);
+    a[cur] = Math.round((g.reduce((x, y) => x + y, 0) + sf) / (g.length + 1)); n[cur] = g.length + 1;
+  }
+  return {a, n, cur: sf != null ? cur : null};
+}
 function hvText(H, i) {
-  const a = H.avg || [], n = H.n || [], r = hvR(i);
-  return a[i] != null ? `<b>${r}</b> 평균 <b>+${num(a[i])}회</b> (${num(n[i])}일 평균)` : `<b>${r}</b> 아직 데이터가 없어요`;
+  const {a, n, cur} = hvVals(H), r = hvR(i);
+  if (a[i] == null) return `<b>${r}</b> 아직 데이터가 없어요`;
+  return `<b>${r}</b> 평균 <b>+${num(a[i])}회</b> (${i === cur ? `오늘 진행 중 포함, ${num(n[i])}일` : `${num(n[i])}일 평균`})`;
 }
 function hourlyHTML(d) {
   const H = d.hourly_views;
   const head = `<h2 class="tgh has-tip" tabindex="0">시간대별 평균 조회수 <i class="q">?</i><div class="tip">${HV_TIP}</div></h2>`;
   if (!H) return head + `<div class="card empty">아직 데이터가 없어요</div>`;
-  const a = H.avg || [];
+  const {a} = hvVals(H);
   const max = Math.max(1, ...a.filter(x => x != null));
   const rank = a.map((v, i) => [v, i]).filter(x => x[0] != null && x[0] > 0).sort((x, y) => y[0] - x[0]).slice(0, 3).map(x => x[1]);
   const best = rank[0], top = new Set(rank.slice(1));
