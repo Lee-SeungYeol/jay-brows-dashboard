@@ -654,11 +654,28 @@ def instagram(page_id, tok):
 
 def ig_comments(media_id, tok):
     """Top-level comments plus their replies, flattened."""
+    base = "id,username,text,timestamp,like_count"
+    rows = None
+    # Busy posts can trip "Please reduce the amount of data": shrink the page, then drop the nested replies.
+    for lim in (50, 25, 10):
+        try:
+            rows = paged(f"{media_id}/comments", tok, COMMENT_LIMIT, limit=lim, fields=f"{base},replies{{{base}}}")
+            break
+        except RuntimeError as e:
+            if "reduce the amount" not in str(e):
+                raise
+    if rows is None:
+        rows = paged(f"{media_id}/comments", tok, COMMENT_LIMIT, limit=50, fields=base)
+
+        def replies_of(c):
+            try:
+                return paged(f"{c['id']}/replies", tok, COMMENT_LIMIT, limit=50, fields=base)
+            except RuntimeError:
+                return []
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for c, rs in zip(rows, pool.map(replies_of, rows)):
+                c["replies"] = {"data": rs}
     out = []
-    rows = paged(
-        f"{media_id}/comments", tok, COMMENT_LIMIT, limit=50,
-        fields="id,username,text,timestamp,like_count,replies{id,username,text,timestamp,like_count}",
-    )
     for c in rows:
         out.append({"user": c.get("username", ""), "text": c.get("text", ""),
                     "time": c.get("timestamp"), "likes": c.get("like_count", 0), "reply": False,
