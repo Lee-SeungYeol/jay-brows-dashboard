@@ -234,7 +234,7 @@ body.lock{overflow:hidden}
 .hvb .hc.nd i{height:6px!important;background:color-mix(in srgb,var(--text) 8%,transparent)}
 .hvb .hc .p{position:absolute;left:0;right:0;bottom:0;border:1.5px dashed var(--ig);border-bottom:0;border-radius:3px 3px 0 0;background:repeating-linear-gradient(135deg,var(--ig) 0 2px,transparent 2px 5px)}
 .hvx{display:flex;gap:2px;margin-top:3px}
-.hvx span{flex:1 1 0;min-width:0;text-align:center;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hvx span{flex:1 1 0;min-width:0;text-align:left;white-space:nowrap;overflow:visible;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .hvx span.now{color:var(--ig);font-weight:700}
 .hv .lg{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
 .hv .lg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:var(--ig)}
@@ -884,10 +884,12 @@ setInterval(load, 60000);  // 1분마다 새 데이터 확인
 /* ---------- 시간대별 평균 조회수 (instagram.hourly_views: KST 시간대별 전체 조회수 증가량 평균) ---------- */
 const HV_TIP = "하루를 1시간 단위로 나눠, 각 시간대에 전체 게시물(피드+릴스) 조회수가 평균 얼마나 늘었는지 보여줘요. 날이 쌓일수록 정확해져요.";
 let hvSel = null;  // 선택한 시간 — 1분 새로고침 후에도 유지
+const hvR = i => `${i}~${i + 1}시`;
 function hvText(H, i) {
   const a = H.avg || [], n = H.n || [], cur = H.current_hour;
-  let s = a[i] != null ? `<b>${i}시</b> 평균 <b>+${num(a[i])}회</b> (${num(n[i])}일 기준)` : `<b>${i}시</b> 아직 데이터가 없어요`;
-  if (i === cur && H.current_hour_so_far != null) s += ` · 지금까지 +${num(H.current_hour_so_far)}회`;
+  const r = hvR(i), now = i === cur && H.current_hour_so_far != null ? `<b>${r}</b> 지금까지 +${num(H.current_hour_so_far)}회` : "";
+  let s = a[i] != null ? `<b>${r}</b> 평균 <b>+${num(a[i])}회</b> (${num(n[i])}일 기준)` : now ? "" : `<b>${r}</b> 아직 데이터가 없어요`;
+  if (now) s += (s ? " · " : "") + now;
   return s;
 }
 function hourlyHTML(d) {
@@ -898,16 +900,16 @@ function hourlyHTML(d) {
   const max = Math.max(1, ...a.filter(x => x != null), sf || 0);
   const top = new Set(a.map((v, i) => [v, i]).filter(x => x[0] != null && x[0] > 0).sort((x, y) => y[0] - x[0]).slice(0, 3).map(x => x[1]));
   const days = Object.keys(H.days || {}).length;
-  const def = top.size ? `많이 오르는 시간: ${[...top].sort((x, y) => a[y] - a[x]).map(i => `<b>${i}시</b>`).join(" · ")}` : "1시간이 지나면 첫 막대가 생겨요";
+  const def = top.size ? `많이 오르는 시간: ${[...top].sort((x, y) => a[y] - a[x]).map(i => `<b>${hvR(i)}</b>`).join(" · ")}` : "1시간이 지나면 첫 막대가 생겨요";
   const bars = a.map((v, i) => {
     const nd = v == null, pct = nd ? 0 : Math.max(2, v / max * 100);
     const part = i === cur && sf != null ? `<span class="p" style="height:${Math.max(2, sf / max * 100).toFixed(1)}%"></span>` : "";
-    return `<span class="hc${nd ? " nd" : ""}${top.has(i) ? " top" : ""}${i === cur ? " cur" : ""}${hvSel === i ? " sel" : ""}" data-hv="${i}" tabindex="0" role="button" aria-label="${i}시"><i style="height:${pct.toFixed(1)}%"></i>${part}</span>`;
+    return `<span class="hc${nd ? " nd" : ""}${top.has(i) ? " top" : ""}${i === cur ? " cur" : ""}${hvSel === i ? " sel" : ""}" data-hv="${i}" tabindex="0" role="button" aria-label="${hvR(i)}"><i style="height:${pct.toFixed(1)}%"></i>${part}</span>`;
   }).join("");
-  const ticks = a.map((_, i) => `<span${i === cur ? ' class="now"' : ""}>${i % 3 === 0 || i === cur ? i : ""}</span>`).join("");
+  const ticks = a.map((_, i) => `<span${i === cur ? ' class="now"' : ""}>${i % 3 === 0 ? `${i}~${i + 1}` : ""}</span>`).join("");
   return head + `<div class="card hv" id="hvbox" data-def="${esc(def)}"><div class="sub" id="hvsub">${hvSel != null ? hvText(H, hvSel) : def}</div>` +
     `<div class="hvb">${bars}</div><div class="hvx">${ticks}</div>` +
-    `<div class="lg"><span><i></i>많이 오르는 3개 시간</span>${sf != null ? `<span><i class="p"></i>지금 시간(진행 중)</span>` : ""}<span>${num(days)}일 기록 · 한국 시간</span></div></div>`;
+    `<div class="lg"><span><i></i>많이 오르는 3개 시간</span>${sf != null ? `<span><i class="p"></i>지금 시간(진행 중)</span>` : ""}<span>${num(days)}일 기록 · 한국 시간(시)</span></div></div>`;
 }
 function hvShow(i) {
   const s = document.getElementById("hvsub"), H = data && data.instagram && data.instagram.hourly_views;
