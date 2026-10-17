@@ -9,7 +9,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
 TOKEN = os.environ.get("META_TOKEN", "").strip()
@@ -271,12 +271,27 @@ def instagram(page_id, tok):
             totals[metric] = r[0].get("total_value", {}).get("value")
     errors[:] = [e for e in errors if "/insights" not in e]  # unsupported metrics are expected
 
-    # Follower history, one point per hour.
+    # Yesterday's full-day totals (KST), shown until our own history covers 24h.
+    kst = timezone(timedelta(hours=9))
+    midnight = datetime.now(kst).replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday = {}
+    for metric in ("reach", "views", "profile_views", "accounts_engaged"):
+        r = soft(lambda: get(f"{ig_id}/insights", tok, metric=metric, period="day", metric_type="total_value",
+                             since=int((midnight - timedelta(days=1)).timestamp()),
+                             until=int(midnight.timestamp())).get("data", []), [])
+        if r:
+            yesterday[metric] = r[0].get("total_value", {}).get("value")
+    errors[:] = [e for e in errors if "/insights" not in e]
+
+    # Hourly snapshot of the headline numbers; the page diffs against ~24h ago.
+    feed = [p for p in posts if p["kind"] == "FEED"][:POST_LIMIT]
+    snap = {"t": now, "followers": prof.get("followers_count"), "follows": prof.get("follows_count"),
+            "media": prof.get("media_count"),
+            "r_likes": sum(p["likes"] or 0 for p in feed), "r_comments": sum(p["comments_count"] or 0 for p in feed)}
+    snap.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
     hist = load("ig_followers.json", [])
-    hour = now[:13]
-    if not hist or hist[-1]["t"][:13] != hour:
-        hist.append({"t": now, "followers": prof.get("followers_count"),
-                     "follows": prof.get("follows_count"), "media": prof.get("media_count")})
+    if not hist or hist[-1]["t"][:13] != now[:13]:
+        hist.append(snap)
     save("ig_followers.json", hist)
 
     return {
@@ -288,6 +303,7 @@ def instagram(page_id, tok):
         "media_count": prof.get("media_count"),
         "daily_reach": daily_reach,
         "today": totals,
+        "yesterday": yesterday,
         "follower_history": hist,
         "posts": posts,
         "stories": story_list,

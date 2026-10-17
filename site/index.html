@@ -20,11 +20,20 @@ h1{font-size:22px;margin:0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
 .stat b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
 .stat span{color:var(--muted);font-size:13px}
+.stat{position:relative}
+.stat .delta{font-style:normal;font-size:13px;font-weight:600;margin-left:6px;color:var(--muted)}
+.stat .delta.up{color:#16a34a}.stat .delta.down{color:#dc2626}
+.stat b{display:inline}
+.stat span{display:block;margin-top:4px}
+.stat .q{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);font-size:10px;margin-left:3px}
+.stat .tip{display:none;position:absolute;left:8px;right:8px;top:calc(100% + 6px);z-index:5;background:var(--text);color:var(--bg);padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.5;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.stat .tip small{opacity:.75}
+.has-tip{cursor:help}
+@media (hover:hover){.has-tip:hover .tip{display:block}}
+.has-tip.show .tip{display:block}
 h2{font-size:17px;margin:28px 0 10px}
 .warn{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:12px 14px;margin-top:16px;font-size:14px}
 .warn ul{margin:6px 0 0;padding-left:18px}
-.bars{display:flex;align-items:flex-end;gap:3px;height:120px}
-.bars div{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
 .posts{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .post{display:flex;flex-direction:column;overflow:hidden;padding:0}
 .post img{width:100%;aspect-ratio:1;object-fit:cover;background:var(--line)}
@@ -131,7 +140,24 @@ const LABELS = {reach: "도달", views: "조회", saved: "저장", shares: "공�
   total_interactions: "총 반응", profile_visits: "프로필 방문", follows: "팔로우"};
 const ins = p => p.insights ? Object.entries(LABELS).filter(([k]) => p.insights[k] != null)
   .map(([k, l]) => `<span>${l} ${num(p.insights[k])}</span>`).join("") : "";
-function stat(label, v) { return `<div class="card stat"><b>${num(v)}</b><span>${label}</span></div>`; }
+// 기준: 약 24시간 전 스냅샷 (기록이 24시간 안 됐으면 가장 오래된 기록)
+function baseline(hist) {
+  if (!hist || hist.length < 2) return null;
+  const now = Date.parse(hist[hist.length - 1].t), target = now - 864e5;
+  let b = hist[0];
+  for (const r of hist) if (Date.parse(r.t) <= target) b = r;
+  const hrs = Math.round((now - Date.parse(b.t)) / 36e5);
+  return hrs >= 1 ? {row: b, label: hrs >= 23 ? "어제 같은 시각 대비" : `${hrs}시간 전 대비`} : null;
+}
+function stat(label, v, tip = "", base = null, key = null, extra = "") {
+  let delta = "";
+  if (base && key && v != null && base.row[key] != null) {
+    const dv = v - base.row[key];
+    delta = `<em class="delta ${dv > 0 ? "up" : dv < 0 ? "down" : ""}" title="${base.label}">${dv > 0 ? "+" : dv < 0 ? "−" : "±"}${num(Math.abs(dv))}</em>`;
+  }
+  const t = tip ? `${tip}${delta ? `<br><small>증감: ${base.label}</small>` : ""}${extra ? `<br><small>${extra}</small>` : ""}` : "";
+  return `<div class="card stat${t ? " has-tip" : ""}" tabindex="0"><b>${num(v)}</b>${delta}<span>${label}${t ? ' <i class="q">?</i>' : ""}</span>${t ? `<div class="tip">${t}</div>` : ""}</div>`;
+}
 const who = c => (c.reply ? "↳ " : "") + esc(c.user);
 const card = (p, extra = "") => `
     <div class="card post">
@@ -235,22 +261,28 @@ function render() {
   const likes = posts.reduce((a, p) => a + (p.likes || 0), 0);
   const cmts = posts.reduce((a, p) => a + (p.comments_count || 0), 0);
   const t = d.today || {};
-  let h = (isIG ? `<div class="grid">` + stat("오늘 도달", t.reach) + stat("오늘 조회", t.views) +
-      stat("오늘 프로필 방문", t.profile_views) + stat("오늘 반응 계정", t.accounts_engaged) + `</div>` : "") +
+  const b = isIG ? baseline(d.follower_history) : null, y = d.yesterday || {};
+  const yd = k => y[k] != null ? `어제 하루 전체: ${num(y[k])}` : "";
+  const r25 = posts.slice(0, 25), rl = r25.reduce((a, p) => a + (p.likes || 0), 0), rc = r25.reduce((a, p) => a + (p.comments_count || 0), 0);
+  let h = (isIG ? `<div class="grid">` +
+      stat("오늘 도달", t.reach, "오늘 내 게시물·릴스·스토리·프로필을 한 번이라도 본 계정 수예요. 한 사람이 여러 번 봐도 1명으로 세요.", b, "reach", yd("reach")) +
+      stat("오늘 조회", t.views, "오늘 콘텐츠가 화면에 표시되거나 재생된 총 횟수예요. 같은 사람이 여러 번 보면 모두 셉니다.", b, "views", yd("views")) +
+      stat("오늘 프로필 방문", t.profile_views, "오늘 내 프로필 페이지를 연 횟수예요.", b, "profile_views", yd("profile_views")) +
+      stat("오늘 반응 계정", t.accounts_engaged, "오늘 좋아요·댓글·저장·공유·답장 등으로 반응한 계정 수예요(중복 제외).", b, "accounts_engaged", yd("accounts_engaged")) +
+      `</div>` : "") +
     `<div class="grid">` +
-    (tab === "instagram"
-      ? stat("팔로워", d.followers) + stat("팔로잉", d.follows) + stat("게시물", d.media_count)
+    (isIG
+      ? stat("팔로워", d.followers, "나를 팔로우하는 계정 수예요.", b, "followers") +
+        stat("팔로잉", d.follows, "내가 팔로우하는 계정 수예요.", b, "follows") +
+        stat("게시물", d.media_count, "프로필에 올라간 전체 게시물 수(피드+릴스)예요.", b, "media")
       : stat("팔로워", d.followers) + stat("페이지 좋아요", d.fans)) +
-    stat(`최근 ${posts.length}개 좋아요`, likes) + stat(`최근 ${posts.length}개 댓글`, cmts) +
-    stat("게시물당 평균 반응", posts.length ? Math.round((likes + cmts) / posts.length) : null) +
+    (isIG
+      ? stat("최근 25개 좋아요", rl, "가장 최근 피드 게시물 25개의 좋아요 합계예요.", b, "r_likes") +
+        stat("최근 25개 댓글", rc, "가장 최근 피드 게시물 25개의 댓글 합계(답글 포함)예요.", b, "r_comments") +
+        stat("게시물당 평균 반응", r25.length ? Math.round((rl + rc) / r25.length) : null, "최근 25개 게시물의 (좋아요+댓글) ÷ 25 예요. 높을수록 게시물 하나가 받는 반응이 커요.")
+      : stat(`최근 ${posts.length}개 좋아요`, likes) + stat(`최근 ${posts.length}개 댓글`, cmts) +
+        stat("게시물당 평균 반응", posts.length ? Math.round((likes + cmts) / posts.length) : null)) +
     `</div>`;
-
-  if (d.daily_reach && d.daily_reach.length) {
-    const max = Math.max(...d.daily_reach.map(r => r.value), 1);
-    h += `<h2>일별 도달</h2><div class="card"><div class="bars">` +
-      d.daily_reach.map(r => `<div title="${r.date}: ${num(r.value)}" style="height:${r.value / max * 100}%"></div>`).join("") +
-      `</div></div>`;
-  }
 
   const all = all_posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
     .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 100);
@@ -279,6 +311,9 @@ function render() {
 }
 
 document.addEventListener("click", e => {
+  const st = e.target.closest(".has-tip");
+  document.querySelectorAll(".has-tip.show").forEach(x => { if (x !== st) x.classList.remove("show"); });
+  if (st) { st.classList.toggle("show"); return; }
   if (e.target.closest("button[data-more]")) { shown += PAGE; renderList(); return; }
   const b = e.target.closest("button[data-k],button[data-s]");
   if (!b) return;
