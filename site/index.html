@@ -195,7 +195,7 @@ body.lock{overflow:hidden}
 .t3 .li i{width:10px;height:3px;border-radius:2px;display:block}
 .t3 .li img,.t3 .li .ph{width:22px;height:22px;border-radius:5px;object-fit:cover;background:var(--line);display:block}
 .t3 .li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.t3 .li b{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.t3 .li b small{font-weight:600;font-size:11px;color:#16a34a}.t3 .li b{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .t3c .ln.s1,.t3c .pt.s1,.t3c .sel.s1{stroke:var(--s1)}.t3c .ln.s2,.t3c .sel.s2{stroke:var(--s2)}.t3c .ln.s3,.t3c .sel.s3{stroke:var(--s3)}
 .t3c .sel.s1{fill:var(--s1)}.t3c .sel.s2{fill:var(--s2)}.t3c .sel.s3{fill:var(--s3)}
 .t3c .vl{stroke:var(--text)}
@@ -550,15 +550,19 @@ function topGrowthHTML(d) {
 
 /* ---------- 급상승 TOP 3 조회수 추이 (instagram.top3_series: 시간별 기록 + 3분 스냅샷 + 현재값) ---------- */
 const T3C = ["s1", "s2", "s3"];
-const t3Series = d => (d.top3_series || []).map((s, i) => ({...s, c: T3C[i],
-  pts: (s.points || []).map(([t, v]) => ({ts: Date.parse(t), v})).filter(p => isFinite(p.ts) && p.v != null).sort((a, b) => a.ts - b.ts)}));
+// y = 증가량: 각 게시물의 첫 점 대비 늘어난 조회수 (v), 실제 누적 조회수는 tot
+const t3Series = d => (d.top3_series || []).map((s, i) => {
+  const raw = (s.points || []).map(([t, v]) => ({ts: Date.parse(t), tot: v})).filter(p => isFinite(p.ts) && p.tot != null).sort((a, b) => a.ts - b.ts);
+  const b0 = raw.length ? raw[0].tot : 0;
+  return {...s, c: T3C[i], pts: raw.map(p => ({...p, v: p.tot - b0}))};
+});
 function top3HTML(d) {
   const S = t3Series(d);
   const head = `<h2>급상승 TOP 3 조회수 추이</h2>`;
   if (!S.length || Math.max(...S.map(s => s.pts.length)) < 2) return head + `<div class="card t3"><div class="fchart t3c"><div class="msg">조회수 기록이 쌓이는 중이에요</div></div></div>`;
   return head + `<div class="card t3"><div class="lg3">` + S.map(s => {
-    const cur = s.pts.length ? s.pts[s.pts.length - 1].v : null;
-    return `<a class="li" href="${esc(s.url || "#")}" target="_blank" rel="noopener" title="${esc(s.text)}"><i style="background:var(--${s.c})"></i>${s.image ? `<img loading="lazy" src="${esc(s.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}<span>${esc(s.text) || (s.kind === "REELS" ? "(릴스)" : "(내용 없음)")}</span><b>${cur != null ? num(cur) : "–"}</b></a>`;
+    const lp = s.pts[s.pts.length - 1];
+    return `<a class="li" href="${esc(s.url || "#")}" target="_blank" rel="noopener" title="${esc(s.text)}"><i style="background:var(--${s.c})"></i>${s.image ? `<img loading="lazy" src="${esc(s.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}<span>${esc(s.text) || (s.kind === "REELS" ? "(릴스)" : "(내용 없음)")}</span><b>${lp ? `${num(lp.tot)} <small class="up">${sgn(lp.v)}</small>` : "–"}</b></a>`;
   }).join("") + `</div><div class="fchart t3c" id="t3chart"></div></div>`;
 }
 function drawTop3() {
@@ -571,8 +575,8 @@ function drawTop3() {
   const L = 54, R = 10, TP = 8, B = 30, pw = W - L - R, ph = H - TP - B;
   const t0 = all[0], t1 = all[all.length - 1], span = Math.max(1, t1 - t0);
   const vals = S.flatMap(s => s.pts.map(p => p.v));
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  if (hi - lo < 2) { hi += 2; lo -= 2; }
+  let lo = Math.min(0, ...vals), hi = Math.max(...vals);
+  if (hi - lo < 2) hi = lo + 2;
   const raw = (hi - lo) / 3, mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const step = Math.max(1, [1, 2, 5, 10].map(m => m * mag).find(st => st >= raw));
   const k0 = Math.floor(lo / step + 1e-9), k1 = Math.ceil(hi / step - 1e-9);
@@ -581,7 +585,7 @@ function drawTop3() {
   let g = "";
   for (let k = k0; k <= k1; k++) {
     const v = k * step;
-    g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${num(v)}</text>`;
+    g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v > 0 ? "+" : ""}${num(v)}</text>`;
   }
   const maxLab = Math.max(2, Math.floor(pw / 70));
   const steps = [3, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map(m => m * 6e4);
@@ -596,7 +600,7 @@ function drawTop3() {
     const x = X(ts), xl = i ? (x + X(all[i - 1])) / 2 : L, xr = i < all.length - 1 ? (x + X(all[i + 1])) / 2 : W - R;
     hits += `<rect class="hit" data-ti="${i}" x="${xl.toFixed(1)}" y="${TP}" width="${Math.max(1, xr - xl).toFixed(1)}" height="${ph}"/>`;
   });
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="급상승 TOP 3 조회수 누적 추이">${g}<line class="vl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/>${lines}${S.map(s => `<circle class="sel ${s.c}" r="4" style="display:none"/>`).join("")}${hits}</svg><div class="ctip" style="display:none"></div>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="급상승 TOP 3 조회수 증가 추이">${g}<line class="vl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/>${lines}${S.map(s => `<circle class="sel ${s.c}" r="4" style="display:none"/>`).join("")}${hits}</svg><div class="ctip" style="display:none"></div>`;
   box._geo = {X, Y, W}; box._all = all; box._S = S;
   const si = all.indexOf(chartSel.t3chart);
   if (si >= 0) t3Point(box, si); else delete chartSel.t3chart;
@@ -613,7 +617,7 @@ function t3Point(box, i) {
     let p = null; for (const q of s.pts) { if (q.ts <= ts) p = q; else break; }
     const dot = dots[j];
     if (p) { dot.setAttribute("cx", X(p.ts)); dot.setAttribute("cy", Y(p.v)); dot.style.display = ""; } else dot.style.display = "none";
-    rows += `<br><i style="background:var(--${s.c})"></i>${esc((s.text || "").slice(0, 14)) || "게시물"} <b>${p ? num(p.v) : "–"}</b>`;
+    rows += `<br><i style="background:var(--${s.c})"></i>${esc((s.text || "").slice(0, 14)) || "게시물"} <b>${p ? sgn(p.v) : "–"}</b>${p ? ` <small>(누적 ${num(p.tot)}회)</small>` : ""}`;
   });
   const tip = box.querySelector(".ctip");
   tip.innerHTML = fullT(ts) + rows; tip.style.display = "block";

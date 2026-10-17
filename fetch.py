@@ -480,9 +480,27 @@ def ig_views_hourly(views, now):
     return st
 
 
+TOP3_MAX_PTS = 600
+
+
+def _thin(pts, tnow):
+    """Downsample: keep all points from the last 24h; thin older ones evenly (first one always kept)."""
+    if len(pts) > TOP3_MAX_PTS:
+        recent = [p for p in pts if (tnow - p[0]).total_seconds() <= 86400]
+        old = pts[:len(pts) - len(recent)]
+        room = max(2, TOP3_MAX_PTS - len(recent))
+        if len(old) > room:
+            step = (len(old) - 1) / (room - 1)
+            old = [old[round(i * step)] for i in range(room)]
+        pts = old + recent
+    return [[dt.isoformat(), v] for dt, v in pts]
+
+
 def ig_top3_series(top_growth, hourly, views, now):
-    """Cumulative views over time for the top 3 of top_growth: hourly history (last 7 days)
-    + every 3-min snapshot in ig_views_window.json + the current value."""
+    """Cumulative views over time for the top 3 of top_growth: ALL hourly history (kept forever)
+    + every 3-min snapshot in ig_views_window.json + the current value.
+    To keep data.json small, a series longer than TOP3_MAX_PTS keeps every point from the last 24h
+    and evenly thins the older (hourly) points so the total fits."""
     tnow = datetime.fromisoformat(now)
     snaps = load("ig_views_window.json", [])
     w0 = min((datetime.fromisoformat(s["t"]) for s in snaps), default=tnow)
@@ -491,7 +509,7 @@ def ig_top3_series(top_growth, hourly, views, now):
         pid, pts = r["id"], {}
         for t, v in zip(hourly.get("t") or [], (hourly.get("v") or {}).get(pid) or []):
             dt = datetime.fromisoformat(t)
-            if v is not None and (tnow - dt).total_seconds() <= 7 * 86400 and dt < w0:
+            if v is not None and dt < w0:
                 pts[dt] = v
         for s in snaps:
             v = (s.get("views") or {}).get(pid)
@@ -501,7 +519,7 @@ def ig_top3_series(top_growth, hourly, views, now):
             pts[tnow] = views[pid]
         out.append({"id": pid, "text": (r.get("text") or "")[:40], "url": r.get("url"), "image": r.get("image"),
                     "kind": r.get("kind"),
-                    "points": [[dt.isoformat(), v] for dt, v in sorted(pts.items(), key=lambda x: x[0])]})
+                    "points": _thin([[dt, v] for dt, v in sorted(pts.items(), key=lambda x: x[0])], tnow)})
     return out
 
 
