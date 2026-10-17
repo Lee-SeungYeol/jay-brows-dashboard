@@ -1,0 +1,8 @@
+name = "jay-brows-reply"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://lee-seungyeol.github.io"
+
+# 비밀값(코드/깃에 넣지 않음): wrangler secret put META_TOKEN / REPLY_PASSWORD

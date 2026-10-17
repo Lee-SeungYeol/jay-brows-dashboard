@@ -167,6 +167,23 @@ td{overflow-wrap:anywhere}
 .atag{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--accent);color:#fff;margin-right:5px;vertical-align:1px}
 @media (max-width:600px){#cm{padding:0;align-items:flex-end}#cm .sh{width:100%;max-height:none;height:94vh;border-radius:16px 16px 0 0}}
 body.lock{overflow:hidden}
+/* 대시보드에서 바로 답글 */
+.rpx{border-top:1px solid var(--line);padding:10px 14px 12px;display:flex;flex-direction:column;gap:7px;font-size:13px}
+.rpx .rh{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--muted)}
+.rpx .rh b{color:var(--text)}
+.rpx textarea,.rpx input{width:100%;font:inherit;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.rpx textarea{resize:vertical;min-height:60px;max-height:30vh}
+.rpx .rr{display:flex;gap:8px;align-items:center}
+.rpx .rr input{flex:1}
+.rpx button.go{border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:600;padding:9px 14px;cursor:pointer;white-space:nowrap}
+.rpx button.go:disabled{opacity:.5;cursor:default}
+.rpx .lk{border:0;background:none;color:var(--muted);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer;padding:0}
+.rpx .st{min-height:1em;font-size:12.5px}
+.rpx .st.ok{color:#16a34a}.rpx .st.err{color:#dc2626}
+.rpx.off{color:var(--muted);text-align:center}
+.rpt{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0 0 0 6px}
+.ic.tg .m{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:10px;outline-offset:2px}
+.sent{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--line);color:var(--muted);margin-left:5px}
 /* 조회수 급상승 TOP 10 */
 .tgh{position:relative}
 .tgh .q{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);font-size:10px;margin-left:3px;vertical-align:2px;font-weight:400}
@@ -207,8 +224,10 @@ body.lock{overflow:hidden}
   <div id="errors"></div>
   <div id="view"></div>
 </main>
-<div id="cm" role="dialog" aria-modal="true" aria-label="댓글 스레드"><div class="sh"><div class="top" id="cmtop"></div><div class="bd" id="cmbd"></div></div></div>
+<div id="cm" role="dialog" aria-modal="true" aria-label="댓글 스레드"><div class="sh"><div class="top" id="cmtop"></div><div class="bd" id="cmbd"></div><div class="rpx" id="cmrp" hidden></div></div></div>
 <script>
+// 답글 Worker 주소 (비어 있으면 대시보드 답글 기능 숨김). 예: "https://jay-brows-reply.xxx.workers.dev"
+const REPLY_API = "";
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = n => n == null ? "–" : Number(n).toLocaleString("ko-KR");
 // 간단한 한국식 단위: 1.2만, 3.4억
@@ -333,8 +352,10 @@ function thList() {
 const rel = t => { const s = (Date.now() - ts(t)) / 1000;
   return s < 60 ? "방금" : s < 3600 ? Math.floor(s / 60) + "분 전" : s < 86400 ? Math.floor(s / 3600) + "시간 전" : s < 86400 * 7 ? Math.floor(s / 86400) + "일 전" : s < 86400 * 365 ? Math.floor(s / 86400 / 7) + "주 전" : Math.floor(s / 86400 / 365) + "년 전"; };
 const avColor = u => { let h = 0; for (const ch of String(u)) h = (h * 31 + ch.codePointAt(0)) % 360; return `hsl(${h} 50% 46%)`; };
-const icHTML = (c, rp, extra = "") => { const me = isOwner(c.user), u = String(c.user || "?");
-  return `<div class="ic${rp ? " rp" : ""}${me ? " me" : ""}"><span class="av" style="background:${me ? "var(--accent)" : avColor(u)}">${esc(([...u.replace(/^[@._]+/, "")][0] || "?").toUpperCase())}</span>
+const icHTML = (c, rp, extra = "", tk) => { const me = isOwner(c.user), u = String(c.user || "?");
+  if (tk != null && rpOn()) extra += `<button class="rpt" data-rpk="${esc(tk)}" aria-label="${esc(u)}에게 답글">↳ 답글</button>`;
+  if (c._sent) extra += `<span class="sent">전송됨</span>`;
+  return `<div class="ic${rp ? " rp" : ""}${me ? " me" : ""}${tk != null && rpOn() && rpS.key === tk ? " tg" : ""}"><span class="av" style="background:${me ? "var(--accent)" : avColor(u)}">${esc(([...u.replace(/^[@._]+/, "")][0] || "?").toUpperCase())}</span>
     <div class="m">${me ? `<span class="atag">작성자</span>` : ""}<b>${esc(u)}</b>${esc(c.text)}<small>${rel(c.time)} · ${when(c.time)}${c.likes ? ` · ♥ ${num(c.likes)}` : ""}</small>${extra}</div></div>`; };
 /* 인스타 댓글 딥링크: /p/SHORTCODE/c/COMMENT_ID/ (답글은 /c/PARENT/r/REPLY/) */
 const igShort = u => (String(u || "").match(/instagram\.com\/(?:[^\/?#]+\/)?(?:p|reel|reels|tv)\/([^\/?#]+)/) || [])[1];
@@ -355,11 +376,123 @@ function showTh(id) {
   document.getElementById("cmtop").innerHTML = `${p.image ? `<img src="${esc(p.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : ""}
     <div class="cp"><p>${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">원문 보기 →</a>` : ""}</div>
     <button class="x" data-cmx="1" aria-label="닫기">✕</button>`;
-  bd.innerHTML = icHTML(t.root) + igBtn(t) + t.replies.map(r => icHTML(r, true, igRp(t, r))).join("");
+  if (openTh !== id) rpReset(t);
+  const sent = pendingSent(t);
+  bd.innerHTML = icHTML(t.root, false, "", t.root.id ? "r" : null) + igBtn(t) + t.replies.map((r, i) => icHTML(r, true, igRp(t, r), t.root.id ? String(i) : null)).join("")
+    + sent.map(r => icHTML(r, true)).join("");
   bd.scrollTop = keep;
+  rpBox(t, openTh !== id);
   if (!m.classList.contains("on")) { m.classList.add("on"); document.body.classList.add("lock"); m.querySelector(".x").focus({preventScroll: true}); }
   openTh = id;
 }
+/* ---------- 대시보드에서 바로 답글 (Cloudflare Worker 경유) ---------- */
+const rpOn = () => !!REPLY_API && tab === "instagram";
+const pw = {
+  get() { try { return localStorage.getItem("jb:replypw") || ""; } catch (e) { return ""; } },
+  set(v) { try { v ? localStorage.setItem("jb:replypw", v) : localStorage.removeItem("jb:replypw"); } catch (e) {} }
+};
+let pwMem = pw.get();  // localStorage가 막힌 환경에서도 이번 세션 동안은 유지
+let rpS = {th: null, key: "r", user: "", text: "", st: "", cls: "", busy: false};
+const sentBy = new Map();  // 스레드 id → 보낸 답글(다음 수집 전까지 임시 표시)
+function rpReset(t) { rpS = {th: t.id, key: "r", user: t.root.user || "", text: t.root.user ? "@" + t.root.user + " " : "", st: "", cls: "", busy: false}; }
+function pendingSent(t) {
+  const arr = sentBy.get(t.id) || [], mine = t.replies.filter(r => isOwner(r.user)).map(r => (r.text || "").trim());
+  const left = arr.filter(r => !mine.includes(r.text.trim()) && Date.now() - ts(r.time) < 3600e3);
+  left.length ? sentBy.set(t.id, left) : sentBy.delete(t.id);
+  return left;
+}
+async function rpCall(path, body, pass) {
+  const r = await fetch(REPLY_API.replace(/\/$/, "") + path, {method: "POST",
+    headers: {"Authorization": "Bearer " + pass, "Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+  const j = await r.json().catch(() => ({}));
+  return {status: r.status, ...j};
+}
+function rpStatus(st, cls) {
+  rpS.st = st; rpS.cls = cls || "";
+  const el = document.querySelector("#cmrp .st");
+  if (el) { el.textContent = st; el.className = "st " + rpS.cls; }
+}
+// fresh=false(1분 자동 새로고침)일 때는 입력 중인 내용·포커스를 건드리지 않도록 박스를 다시 그리지 않음
+function rpBox(t, fresh) {
+  const box = document.getElementById("cmrp");
+  if (!rpOn()) { box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  const mode = !t.root.id ? "noid" : pwMem ? "send" : "login";
+  if (!fresh && box.dataset.mode === mode) return;
+  box.dataset.mode = mode;
+  if (mode === "noid") { box.className = "rpx off"; box.innerHTML = "댓글 ID 수집 중 — 다음 업데이트 후 답글을 보낼 수 있어요"; return; }
+  box.className = "rpx";
+  if (mode === "login") {
+    box.innerHTML = `<div class="rh"><span>대시보드에서 바로 답글 달기 — 처음 한 번 비밀번호를 입력해 주세요</span></div>
+      <form class="rr" data-rplogin="1"><input type="password" id="rppw" autocomplete="current-password" placeholder="답글 비밀번호" aria-label="답글 비밀번호">
+      <button class="go" type="submit">확인</button></form><div class="st ${rpS.cls}">${esc(rpS.st)}</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="rh"><span>답글 상대 <b id="rpwho">@${esc(rpS.user)}</b></span><button class="lk" type="button" data-rplogout="1">로그아웃</button></div>
+    <textarea id="rptx" maxlength="2200" aria-label="답글 내용">${esc(rpS.text)}</textarea>
+    <div class="rr"><div class="st ${rpS.cls}" style="flex:1">${esc(rpS.st)}</div><button class="go" type="button" data-rpsend="1"${rpS.busy ? " disabled" : ""}>답글 보내기</button></div>`;
+}
+function rpTarget(key) {
+  const t = thMap.get(openTh); if (!t) return;
+  const c = key === "r" ? t.root : t.replies[+key]; if (!c) return;
+  const tx = document.getElementById("rptx"), cur = tx ? tx.value : rpS.text, u = c.user || "";
+  // 앞쪽 @멘션만 새 상대로 바꾸고 나머지 내용은 유지
+  const rest = cur.replace(/^@[\w.]+\s*/, "");
+  rpS.key = key; rpS.user = u; rpS.text = (u ? "@" + u + " " : "") + rest;
+  showTh(openTh);
+  const who = document.getElementById("rpwho"); if (who) who.textContent = "@" + u;
+  const nt = document.getElementById("rptx");
+  if (nt) { nt.value = rpS.text; nt.focus(); nt.setSelectionRange(nt.value.length, nt.value.length); }
+}
+async function rpLogin() {
+  const v = (document.getElementById("rppw") || {}).value || "";
+  if (!v) return;
+  rpStatus("확인 중…");
+  try {
+    const r = await rpCall("/check", {}, v);
+    if (!r.ok) { rpStatus(r.status === 401 ? "비밀번호가 맞지 않아요" : "확인 실패: " + (r.error || r.status), "err"); return; }
+    pwMem = v; pw.set(v); rpStatus("", "");
+    const t = thMap.get(openTh); if (t) rpBox(t, true);
+    const tx = document.getElementById("rptx"); if (tx) tx.focus();
+  } catch (e) { rpStatus("서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요", "err"); }
+}
+async function rpSend() {
+  const t = thMap.get(openTh), tx = document.getElementById("rptx");
+  if (!t || !tx || rpS.busy) return;
+  const msg = tx.value.trim();
+  if (!msg) { rpStatus("답글 내용을 입력해 주세요", "err"); return; }
+  if (!t.root.id) { rpStatus("댓글 ID 수집 중이에요", "err"); return; }
+  const btn = document.querySelector("#cmrp [data-rpsend]");
+  rpS.busy = true; if (btn) btn.disabled = true; rpStatus("보내는 중…");
+  try {
+    // 인스타 답글은 항상 원댓글(top-level) id에 달림
+    const r = await rpCall("/reply", {comment_id: String(t.root.id), message: msg}, pwMem);
+    if (r.ok) {
+      const arr = sentBy.get(t.id) || [];
+      arr.push({user: data?.instagram?.username || "나", text: msg, time: new Date().toISOString(), _sent: true});
+      sentBy.set(t.id, arr);
+      rpS.key = "r"; rpS.user = t.root.user || ""; rpS.text = rpS.user ? "@" + rpS.user + " " : "";
+      rpS.st = "보냈어요 ✓ — 다음 업데이트(약 3분)에 반영돼요"; rpS.cls = "ok";
+      rpS.busy = false; showTh(t.id); rpBox(t, true);
+      const b = document.getElementById("cmbd"); b.scrollTop = b.scrollHeight;
+      return;
+    }
+    if (r.status === 401) { pwMem = ""; pw.set(""); rpS.busy = false; rpS.text = msg; rpS.st = "비밀번호가 바뀌었거나 맞지 않아요. 다시 입력해 주세요"; rpS.cls = "err"; rpBox(t, true); return; }
+    rpStatus("인스타그램이 답글을 거절했어요: " + (r.error || "알 수 없는 오류"), "err");
+  } catch (e) { rpStatus("서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요", "err"); }
+  rpS.busy = false; if (btn) btn.disabled = false;
+}
+document.addEventListener("input", e => { if (e.target.id === "rptx") rpS.text = e.target.value; });
+document.addEventListener("submit", e => { if (e.target.closest && e.target.closest("[data-rplogin]")) { e.preventDefault(); rpLogin(); } });
+document.addEventListener("click", e => {
+  const k = e.target.closest && e.target.closest("[data-rpk]");
+  if (k) { e.stopPropagation(); rpTarget(k.dataset.rpk); return; }
+  if (e.target.closest && e.target.closest("[data-rpsend]")) { e.stopPropagation(); rpSend(); return; }
+  if (e.target.closest && e.target.closest("[data-rplogout]")) {
+    e.stopPropagation(); pwMem = ""; pw.set(""); rpS.st = ""; rpS.cls = "";
+    const t = thMap.get(openTh); if (t) rpBox(t, true);
+  }
+}, true);
 function closeTh() { openTh = null; document.getElementById("cm").classList.remove("on"); document.body.classList.remove("lock"); }
 
 function igCard(p, hot) {
