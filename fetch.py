@@ -52,6 +52,13 @@ def resolve_page():
         pages = accounts["data"]
         page = next((p for p in pages if p["id"] == wanted), pages[0])
         return page["id"], page["access_token"]
+    wanted = os.environ.get("PAGE_ID")
+    if wanted:
+        # Business-managed pages don't show up in me/accounts; ask for the page directly.
+        page = soft(lambda: get(wanted, TOKEN, fields="id,access_token"))
+        if page and page.get("access_token"):
+            errors.clear()
+            return page["id"], page["access_token"]
     me = get("me", TOKEN, fields="id")
     errors.clear()  # me/accounts fails for page tokens; that's expected
     return me["id"], TOKEN
