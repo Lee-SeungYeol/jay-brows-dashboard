@@ -26,9 +26,9 @@ h1{font-size:22px;margin:0}
 .stat .delta.up{color:#16a34a}.stat .delta.down{color:#dc2626}
 .stat b{display:inline}
 .stat span{display:block;margin-top:4px}
-.stat .q{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);font-size:10px;margin-left:3px}
-.stat .tip{display:none;position:absolute;left:8px;right:8px;top:calc(100% + 6px);z-index:5;background:var(--text);color:var(--bg);padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.5;box-shadow:0 6px 20px rgba(0,0,0,.2)}
-.stat .tip small{opacity:.75}
+.stat .q,.chcard .q{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);font-size:10px;margin-left:3px}
+.stat .tip,.chcard .tip{display:none;position:absolute;left:8px;right:8px;top:calc(100% + 6px);z-index:5;background:var(--text);color:var(--bg);padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.5;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.stat .tip small,.chcard .tip small{opacity:.75}
 .has-tip{cursor:help}
 @media (hover:hover){.has-tip:hover .tip{display:block}}
 .has-tip.show .tip{display:block}
@@ -67,7 +67,6 @@ td.t{color:var(--muted);white-space:nowrap;font-size:12px}
 .badges{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:4px;flex-wrap:wrap;pointer-events:none}
 .bdg{font-size:11px;font-weight:600;line-height:1;padding:5px 7px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;backdrop-filter:blur(4px);white-space:nowrap}
 .bdg.hot{background:var(--ig)}
-.bdg.live{background:#e11d48}
 .bdg.date{margin-left:auto}
 .igc .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
 .cap{margin:0;font-size:13.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}
@@ -93,18 +92,34 @@ td.t{color:var(--muted);white-space:nowrap;font-size:12px}
 .tag .bdg{background:var(--line);color:var(--text);backdrop-filter:none}
 td{overflow-wrap:anywhere}
 @media (max-width:600px){td.u,td.t{white-space:normal}td.u{max-width:34vw}}
-.fchart{position:relative;padding:12px 10px 8px}
+.chwin{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.chwin button{border:1px solid var(--line);background:var(--card);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}
+.chwin button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
+.chcard{min-width:0;padding:12px 10px 8px}
+.chcard h3{font-size:14.5px;margin:2px 4px 2px;position:relative}
+.chcard h3 .tip{font-weight:400;left:0;right:auto;width:min(320px,80vw)}
+.chcard:last-child:nth-child(odd){grid-column:1/-1}
+.fchart .pt.note{fill:var(--text)}
+.fchart .nt{fill:var(--muted);font-size:10px;font-weight:600}
+.chsum{font-size:12.5px;color:var(--muted);margin:0 4px 4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.chsum b{color:var(--text);font-weight:600}
+.fchart{position:relative;padding-top:4px}
 .fchart svg{display:block;width:100%;height:auto;overflow:visible}
 .fchart .ax{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
 .fchart .gl{stroke:var(--line);stroke-width:1}
 .fchart .zl{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;opacity:.8}
 .fchart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
-.fchart .pt{fill:var(--card);stroke:var(--accent);stroke-width:2}
-.fchart .pt.on{fill:var(--accent)}
+.fchart .pt{fill:var(--accent);stroke:none}
+.fchart .pt.gap{fill:var(--card);stroke:var(--accent);stroke-width:2}
+.fchart .sel{fill:var(--accent);stroke:var(--card);stroke-width:2}
+.fchart .sel.gap{fill:var(--card);stroke:var(--accent)}
 .fchart .hit{fill:transparent;cursor:pointer}
 .fchart .vl{stroke:var(--accent);stroke-width:1;opacity:.35}
-.fchart .ctip{position:absolute;top:8px;z-index:4;pointer-events:none;background:var(--text);color:var(--bg);padding:7px 10px;border-radius:9px;font-size:12.5px;line-height:1.45;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.2);font-variant-numeric:tabular-nums}
+.fchart .ctip{--up:#4ade80;--dn:#f87171;position:absolute;top:4px;z-index:4;pointer-events:none;background:var(--text);color:var(--bg);padding:7px 10px;border-radius:9px;font-size:12.5px;line-height:1.45;width:max-content;max-width:min(290px,100%);box-shadow:0 6px 20px rgba(0,0,0,.2);font-variant-numeric:tabular-nums}
+@media (prefers-color-scheme:dark){.fchart .ctip{--up:#15803d;--dn:#b91c1c}}
 .fchart .ctip small{opacity:.75}
+.fchart .ctip .up{color:var(--up)}.fchart .ctip .dn{color:var(--dn)}.fchart .ctip .zz{opacity:.7}
 .fchart .msg{color:var(--muted);text-align:center;padding:30px 10px;font-size:14px}
 .more{display:block;margin:16px auto 0;font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 22px;border-radius:999px;cursor:pointer}
 </style>
@@ -139,7 +154,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem("jb:" + k); return v == null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem("jb:" + k, v); } catch (e) {} }
 };
-const SUBS = [["FEED", "게시물"], ["REELS", "릴스"], ["STORY", "스토리"], ["TAGGED", "태그·협업"]];
+const AVG_TIP = "게시물 하나가 평균적으로 받는 반응이에요.<br>게시물당 평균 반응 = (전체 좋아요 + 전체 댓글 + 전체 공유 + 전체 저장) ÷ 전체 게시물 수 (피드+릴스 전부).<br><small>공유·저장은 인사이트가 수집된 게시물 기준 평균이에요.</small>";
+const SUBS = [["FEED", "게시물"], ["REELS", "릴스"], ["TAGGED", "태그·협업"]];
 const SORTS = [["new", "최신순"], ["likes", "좋아요순"], ["comments", "댓글순"], ["reach", "도달순"], ["saved", "저장순"]];
 const PAGE = 30;
 let data, tab = store.get("tab", "instagram"), sub = store.get("sub", "FEED"), sort = store.get("sort", "new"), q = "", shown = PAGE;
@@ -154,14 +170,14 @@ const LABELS = {reach: "도달", views: "조회", saved: "저장", shares: "공�
   total_interactions: "총 반응", profile_visits: "프로필 방문", follows: "팔로우"};
 const ins = p => p.insights ? Object.entries(LABELS).filter(([k]) => p.insights[k] != null)
   .map(([k, l]) => `<span>${l} ${num(p.insights[k])}</span>`).join("") : "";
-function stat(label, v, tip = "", base = null, key = null, extra = "") {
+function stat(label, v, tip = "", base = null, key = null, extra = "", vfmt = num) {
   let delta = "";
   if (base && v != null && base.dv != null) {
     const dv = base.dv;
-    delta = `<em class="delta ${dv > 0 ? "up" : dv < 0 ? "down" : ""}" title="${base.label}">${dv > 0 ? "+" : dv < 0 ? "−" : "±"}${num(Math.abs(dv))}</em>`;
+    delta = `<em class="delta ${dv > 0 ? "up" : dv < 0 ? "down" : ""}" title="${base.label}">${dv > 0 ? "+" : dv < 0 ? "−" : "±"}${(base.fmt || num)(Math.abs(dv))}</em>`;
   }
   const t = tip ? `${tip}${delta ? `<br><small>증감: ${base.label}</small>` : ""}${extra ? `<br><small>${extra}</small>` : ""}` : "";
-  return `<div class="card stat${t ? " has-tip" : ""}" tabindex="0"><b>${num(v)}</b>${delta}<span>${label}${t ? ' <i class="q">?</i>' : ""}</span>${t ? `<div class="tip">${t}</div>` : ""}</div>`;
+  return `<div class="card stat${t ? " has-tip" : ""}" tabindex="0"><b>${v == null ? "–" : vfmt(v)}</b>${delta}<span>${label}${t ? ' <i class="q">?</i>' : ""}</span>${t ? `<div class="tip">${t}</div>` : ""}</div>`;
 }
 const who = c => (c.reply ? "↳ " : "") + esc(c.user);
 const card = (p, extra = "") => `
@@ -207,7 +223,7 @@ function igCard(p, hot) {
   return `<article class="igc${hot ? " hot" : ""}">
     <a class="thumb" href="${esc(p.url)}" target="_blank" rel="noopener">
       ${p.image ? `<img loading="lazy" decoding="async" referrerpolicy="no-referrer" src="${esc(p.image)}" alt="" onerror="this.classList.add('broken')">` : ""}
-      <div class="badges">${p.live ? `<span class="bdg live">게시 중</span>` : ""}<span class="bdg">${typeLabel(p)}</span>${hot ? `<span class="bdg hot">인기</span>` : ""}<span class="bdg date">${day(p.time)}</span></div>
+      <div class="badges"><span class="bdg">${typeLabel(p)}</span>${hot ? `<span class="bdg hot">인기</span>` : ""}<span class="bdg date">${day(p.time)}</span></div>
     </a>
     <div class="body">
       <p class="cap">${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
@@ -227,7 +243,7 @@ const tagCard = (p, hot) => `<article class="igc tag${hot ? " hot" : ""}">
 
 function igLists(d) {
   const all = d.posts || [];
-  return {FEED: all.filter(p => p.kind === "FEED"), REELS: all.filter(p => p.kind === "REELS"), STORY: d.stories || [], TAGGED: d.tagged || []};
+  return {FEED: all.filter(p => p.kind === "FEED"), REELS: all.filter(p => p.kind === "REELS"), TAGGED: d.tagged || []};
 }
 
 function renderList() {
@@ -276,9 +292,10 @@ function render() {
   const r1 = x => x == null || !isFinite(x) ? "–" : (Math.round(x * 10) / 10).toLocaleString("ko-KR");
   const aL = tp ? (T.likes || 0) / tp : null, aC = tp ? (T.comments || 0) / tp : null;
   const aS = cov ? (T.shares || 0) / cov : null, aV = cov ? (T.saves || 0) / cov : null;
-  const avg = aL == null ? null : Math.round(aL + aC + (aS || 0) + (aV || 0));
+  const avgB = B("avg_reaction");
+  if (avgB) avgB.fmt = a => a < 1 ? a.toFixed(2) : (Math.round(a * 10) / 10).toLocaleString("ko-KR");
   let h = (isIG ? `<div class="grid">` +
-      stat("오늘 도달", t.reach, "오늘 내 게시물·릴스·스토리·프로필을 한 번이라도 본 계정 수예요. 한 사람이 여러 번 봐도 1명으로 세요.", B("reach", true), "reach", yd("reach")) +
+      stat("오늘 도달", t.reach, "오늘 내 콘텐츠나 프로필을 한 번이라도 본 계정 수예요. 한 사람이 여러 번 봐도 1명으로 세요.", B("reach", true), "reach", yd("reach")) +
       stat("오늘 조회", t.views, "오늘 콘텐츠가 화면에 표시되거나 재생된 총 횟수예요. 같은 사람이 여러 번 보면 모두 셉니다.", B("views", true), "views", yd("views")) +
       stat("오늘 프로필 방문", t.profile_views, "오늘 내 프로필 페이지를 연 횟수예요.", B("profile_views", true), "profile_views", yd("profile_views")) +
       stat("오늘 반응 계정", t.accounts_engaged, "오늘 좋아요·댓글·저장·공유·답장 등으로 반응한 계정 수예요(중복 제외).", B("accounts_engaged", true), "accounts_engaged", yd("accounts_engaged")) +
@@ -290,14 +307,14 @@ function render() {
         stat("전체 댓글", T.comments, `모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}에 달린 댓글 합계(답글 포함)예요.`, B("comments"), "comments") +
         stat("전체 공유", T.shares, "모든 게시물·릴스가 DM·스토리 등으로 공유된 횟수 합계예요.", B("shares"), "shares", covNote) +
         stat("전체 저장", T.saves, "모든 게시물·릴스를 사람들이 저장(북마크)한 횟수 합계예요.", B("saves"), "saves", covNote) +
-        stat("게시물당 평균 반응", avg,
-          `게시물 하나가 평균적으로 받는 반응(좋아요+댓글+공유+저장)이에요.<br>평균 좋아요 ${r1(aL)} · 댓글 ${r1(aC)} · 공유 ${r1(aS)} · 저장 ${r1(aV)}` +
-          `<br><small>계산: (좋아요+댓글) ÷ 전체 게시물 수 + (공유+저장) ÷ 인사이트 수집 게시물 수. 공유·저장은 인사이트를 가져온 게시물에서만 합산되므로, 전체 게시물 수로 나누면 실제보다 작게 나와서 수집된 게시물 수로 나눠요.</small>`)
+        stat("게시물당 평균 반응", T.avg_reaction, `${AVG_TIP}<br>평균 좋아요 ${r1(aL)} · 댓글 ${r1(aC)} · 공유 ${r1(aS)} · 저장 ${r1(aV)}`,
+          avgB, "avg_reaction", covNote, r1)
       : stat("팔로워", d.followers) + stat("페이지 좋아요", d.fans) +
         stat(`최근 ${posts.length}개 좋아요`, likes) + stat(`최근 ${posts.length}개 댓글`, cmts) +
         stat("게시물당 평균 반응", posts.length ? Math.round((likes + cmts) / posts.length) : null)) +
     `</div>`;
-  if (isIG) h += `<h2>시간당 팔로워 증감</h2><div class="card fchart" id="fchart"></div>`;
+  if (isIG) h += `<h2>업데이트별 추이</h2><div class="chwin" role="group" aria-label="차트 기간">${WINS.map(w => `<button data-w="${w}" class="${w === win ? "on" : ""}">${w}시간</button>`).join("")}</div>` +
+    `<div class="chgrid">${CHARTS.map(c => `<div class="card chcard"><h3${c.tip ? ` class="has-tip" tabindex="0"` : ""}>${c.title}${c.tip ? ` <i class="q">?</i><div class="tip">${c.tip}</div>` : ""}</h3><div class="chsum" id="${c.id}-sum"></div><div class="fchart" id="${c.id}"></div></div>`).join("")}</div>`;
 
   const all = all_posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
     .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 100);
@@ -309,7 +326,6 @@ function render() {
     const lists = igLists(d);
     h += `<div class="tabs sub">` + SUBS.map(([k, l]) =>
       `<button data-s="${k}" class="${k === sub ? "on" : ""}">${l} (${lists[k].length})</button>`).join("") + `</div>`;
-    h += sub === "STORY" ? `<p class="muted">스토리는 24시간 뒤 사라지므로 대시보드가 수집을 시작한 뒤의 스토리만 쌓입니다. 하이라이트는 Meta API에서 제공하지 않습니다.</p>` : "";
     h += `<div class="toolbar">
         <input id="igq" type="search" placeholder="${sub === "TAGGED" ? "캡션·계정 검색" : "캡션 검색"}" value="${esc(q)}" autocomplete="off">
         <select id="igsort" aria-label="정렬">${SORTS.map(([k, l]) => `<option value="${k}"${k === sort ? " selected" : ""}>${l}</option>`).join("")}</select>
@@ -320,95 +336,127 @@ function render() {
   }
   v.innerHTML = h;
   if (isIG) {
-    drawChart();
+    drawCharts();
     renderList();
     if (focusQ) { const el = document.getElementById("igq"); el.focus(); try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} }
   }
 }
 
-/* ---------- 시간당 팔로워 증감 차트 ---------- */
-const kstH = new Intl.DateTimeFormat("ko-KR", {timeZone: "Asia/Seoul", hour: "numeric", hourCycle: "h23"});
-const kstDH = new Intl.DateTimeFormat("ko-KR", {timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "numeric", hourCycle: "h23"});
-const sgn = n => (n > 0 ? "+" : n < 0 ? "−" : "±") + num(Math.abs(n));
-let chartPts = [], chartSel = null;   // chartSel: 선택된 점의 시각(t) — 새로고침 후에도 유지
-function drawChart() {
-  const box = document.getElementById("fchart");
-  if (!box || !data || !data.instagram) return;
-  const rows = (data.instagram.follower_history || []).filter(r => r.followers != null && !isNaN(Date.parse(r.t)));
-  const end = rows.length ? Date.parse(rows[rows.length - 1].t) : 0, from = end - 48 * 36e5;
-  const pts = [];
+/* ---------- 업데이트별 증감 차트 (instagram.runs: 데이터 업데이트마다 한 행) ---------- */
+const WINS = [3, 12, 24, 48], GAP_MS = 15 * 6e4;
+let win = +store.get("win", 12); if (!WINS.includes(win)) win = 12;
+const CHARTS = [
+  {id: "fchart", key: "followers", title: "업데이트별 팔로워 증감", abs: v => `팔로워 수 ${num(v)}명`},
+  {id: "lchart", key: "likes", title: "업데이트별 좋아요 증감", abs: v => `전체 좋아요 ${num(v)}`},
+  {id: "achart", key: "avg_reaction", title: "게시물당 평균 반응", dec: 2, tip: AVG_TIP, notes: true, abs: v => `평균 반응 ${v.toFixed(2)}`},
+];
+const chartSel = {};   // 차트 id → 선택된 점의 시각(t) — 새로고침 후에도 유지
+const fx = (n, dec) => dec ? Math.abs(n).toLocaleString("ko-KR", {minimumFractionDigits: dec, maximumFractionDigits: dec}) : num(Math.abs(n));
+const sgn = (n, dec = 0) => (n > 0 ? "+" : n < 0 ? "−" : "±") + fx(n, dec);
+const kst = ts => { const d = new Date(ts + 9 * 36e5); return {mo: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), m: d.getUTCMinutes()}; };
+const p2 = n => String(n).padStart(2, "0");
+const hhmm = ts => { const k = kst(ts); return `${p2(k.h)}:${p2(k.m)}`; };
+const fullT = ts => { const k = kst(ts); return `${k.mo}월 ${k.d}일 ${p2(k.h)}:${p2(k.m)}`; };
+function chartPoints(key, dec = 0) {
+  const rows = ((data.instagram || {}).runs || []).map(r => ({...r, ts: Date.parse(r.t)}))
+    .filter(r => isFinite(r.ts)).sort((a, b) => a.ts - b.ts);
+  const end = rows.length ? rows[rows.length - 1].ts : 0, from = end - win * 36e5, pts = [];
   for (let i = 1; i < rows.length; i++) {
-    const ts = Date.parse(rows[i].t);
-    if (ts < from) continue;
-    pts.push({t: rows[i].t, ts, f: rows[i].followers, d: rows[i].followers - rows[i - 1].followers});
+    const a = rows[i - 1], b = rows[i];
+    if (b.ts < from || a[key] == null || b[key] == null) continue;
+    const gap = b.ts - a.ts > GAP_MS;
+    const np = a.posts != null && b.posts != null ? b.posts - a.posts : 0, dc = a.coverage != null && b.coverage != null ? b.coverage - a.coverage : 0;
+    const covJump = Math.abs(dc) >= Math.max(3, (b.posts || 0) * 0.02);
+    pts.push({t: b.t, ts: b.ts, v: b[key], d: +(b[key] - a[key]).toFixed(dec), gap, np, cov: covJump ? [a.coverage, b.coverage] : null, gapMin: Math.round((b.ts - a.ts) / 6e4), brk: gap || !pts.length || pts[pts.length - 1].i !== i - 1, i});
   }
-  chartPts = pts;
-  if (pts.length < 2) { box.innerHTML = `<div class="msg">데이터 수집 중 — 1시간마다 한 점씩 쌓입니다</div>`; return; }
-  const W = Math.max(280, box.clientWidth - 20), H = W < 480 ? 200 : 240;
-  const L = 40, R = 10, TP = 12, B = 26, pw = W - L - R, ph = H - TP - B;
+  return {pts, nrows: rows.length};
+}
+function drawCharts() { CHARTS.forEach(drawChart); }
+function drawChart(c) {
+  const box = document.getElementById(c.id), sum = document.getElementById(c.id + "-sum");
+  if (!box || !data || !data.instagram) return;
+  const dec = c.dec || 0, {pts} = chartPoints(c.key, dec);
+  box._pts = pts; box._c = c;
+  if (pts.length < 2) { box.innerHTML = `<div class="msg">데이터 수집 중 — 업데이트마다(약 3분) 한 점씩 쌓입니다</div>`; sum.textContent = ""; box._geo = null; return; }
+  const total = +pts.reduce((a, p) => a + p.d, 0).toFixed(dec), mx = pts.reduce((a, p) => p.d > a.d ? p : a, pts[0]);
+  sum.innerHTML = `선택 기간 합계 <b>${sgn(total, dec)}</b> · 최대 증가 ${mx.d > 0 ? `<b>${sgn(mx.d, dec)}</b> (${hhmm(mx.ts)})` : "없음"}`;
+  const W = Math.max(260, box.clientWidth), H = W < 480 ? 190 : 220;
+  const L = dec ? 46 : 40, R = 10, TP = 10, B = 24, pw = W - L - R, ph = H - TP - B;
   const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts, span = Math.max(1, t1 - t0);
   let lo = Math.min(0, ...pts.map(p => p.d)), hi = Math.max(0, ...pts.map(p => p.d));
-  if (lo === hi) { hi += 1; lo -= 1; }
+  const minStep = Math.pow(10, -dec);
+  if (lo === hi) { hi += minStep; lo -= minStep; }
   const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const step = Math.max(1, [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw));
-  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const step = Math.max(minStep, [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw));
+  const sd = Math.max(0, Math.min(dec, -Math.floor(Math.log10(step) + 1e-9)));   // 눈금 소수 자릿수
+  const k0 = Math.floor(lo / step + 1e-9), k1 = Math.ceil(hi / step - 1e-9);
+  lo = k0 * step; hi = k1 * step;
   const X = ts => L + (ts - t0) / span * pw, Y = v => TP + (hi - v) / (hi - lo) * ph;
   let g = "";
-  for (let v = lo; v <= hi + 1e-9; v += step)
-    g += `<line class="${v === 0 ? "zl" : "gl"}" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v > 0 ? "+" : ""}${num(v)}</text>`;
-  if (lo > 0 || hi < 0) g += `<line class="zl" x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}"/>`;
-  // x축 라벨: 화면 폭에 맞춰 간격 조절 (정시 기준)
-  const maxLab = Math.max(2, Math.floor(pw / 46)), hrs = span / 36e5;
-  const every = [1, 2, 3, 4, 6, 12, 24].find(n => hrs / n <= maxLab) || 24;
-  const hourOf = ts => Number(kstH.format(new Date(ts)).replace(/\D/g, ""));
-  let lastLab = -Infinity;
-  for (const p of pts) {
-    const hh = hourOf(p.ts);
-    if (hh % every || p.ts - lastLab < every * 36e5 * 0.9) continue;
-    lastLab = p.ts;
-    g += `<text class="ax" x="${X(p.ts)}" y="${H - 6}" text-anchor="middle">${hh}시</text>`;
+  for (let k = k0; k <= k1; k++) {
+    const v = k * step, lab = (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("ko-KR", {minimumFractionDigits: k ? sd : 0, maximumFractionDigits: sd});
+    g += `<line class="${k === 0 ? "zl" : "gl"}" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${lab}</text>`;
   }
-  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(p.ts).toFixed(1)},${Y(p.d).toFixed(1)}`).join("");
-  const r = pts.length > 60 ? 2.5 : 3.5;
+  // x축 라벨: KST 시계 기준 눈금, 화면 폭에 맞춰 간격 조절
+  const long = win >= 24, labW = long ? 34 : 44, maxLab = Math.max(2, Math.floor(pw / labW));
+  const steps = (long ? [1, 2, 3, 4, 6, 12, 24] : [0.25, 0.5, 1, 2, 3, 6]).map(h => h * 36e5);
+  const every = steps.find(s => span / s <= maxLab) || steps[steps.length - 1], off = 9 * 36e5;
+  for (let ts = Math.ceil((t0 + off) / every) * every - off; ts <= t1; ts += every)
+    g += `<text class="ax" x="${X(ts).toFixed(1)}" y="${H - 6}" text-anchor="middle">${long ? kst(ts).h + "시" : hhmm(ts)}</text>`;
+  // 선: 공백(15분 초과) 지점에서 끊음
+  const line = pts.map(p => `${p.brk ? "M" : "L"}${X(p.ts).toFixed(1)},${Y(p.d).toFixed(1)}`).join("");
+  const dense = pts.length > 80; let lastNote = -Infinity;
   let dots = "", hits = "";
   pts.forEach((p, i) => {
     const x = X(p.ts), xl = i ? (x + X(pts[i - 1].ts)) / 2 : L, xr = i < pts.length - 1 ? (x + X(pts[i + 1].ts)) / 2 : W - R;
-    dots += `<circle class="pt" data-i="${i}" cx="${x}" cy="${Y(p.d)}" r="${r}"/>`;
-    hits += `<rect class="hit" data-pi="${i}" x="${xl}" y="${TP}" width="${Math.max(1, xr - xl)}" height="${ph}"/>`;
+    if (c.notes && (p.np > 0 || p.cov)) {
+      dots += `<circle class="pt note" cx="${x.toFixed(1)}" cy="${Y(p.d).toFixed(1)}" r="3.5"/>`;
+      g += `<line class="gl" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${TP + 12}" y2="${TP + ph}" stroke-dasharray="2 3"/>`;
+      if (x - lastNote > 30) { lastNote = x; g += `<text class="nt" x="${x.toFixed(1)}" y="${TP + 8}" text-anchor="middle">${p.np > 0 ? "새 글" : "수집"}</text>`; }
+    }
+    if (p.gap) dots += `<circle class="pt gap" cx="${x.toFixed(1)}" cy="${Y(p.d).toFixed(1)}" r="4"/>`;
+    else if (!dense || p.brk || (i + 1 < pts.length && pts[i + 1].brk)) dots += `<circle class="pt" cx="${x.toFixed(1)}" cy="${Y(p.d).toFixed(1)}" r="${dense ? 2 : 2.5}"/>`;
+    hits += `<rect class="hit" data-pi="${i}" x="${xl.toFixed(1)}" y="${TP}" width="${Math.max(1, xr - xl).toFixed(1)}" height="${ph}"/>`;
   });
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="최근 48시간 시간당 팔로워 증감">${g}<line class="vl" id="fvl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/><path class="ln" d="${line}"/>${dots}${hits}</svg><div class="ctip" style="display:none"></div>`;
-  box._geo = {X, Y, W, L};
-  const si = pts.findIndex(p => p.t === chartSel);
-  if (si >= 0) selPoint(si); else chartSel = null;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="최근 ${win}시간 ${c.title}">${g}<line class="vl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/><path class="ln" d="${line}"/>${dots}<circle class="sel" r="4.5" style="display:none"/>${hits}</svg><div class="ctip" style="display:none"></div>`;
+  box._geo = {X, Y, W};
+  const si = pts.findIndex(p => p.t === chartSel[c.id]);
+  if (si >= 0) selPoint(box, si); else delete chartSel[c.id];
 }
-function selPoint(i) {
-  const box = document.getElementById("fchart"), p = chartPts[i];
-  if (!box || !p || !box._geo) return;
-  chartSel = p.t;
-  const {X, W} = box._geo, x = X(p.ts);
-  box.querySelectorAll(".pt").forEach(c => c.classList.toggle("on", +c.dataset.i === i));
-  const vl = box.querySelector("#fvl"); vl.setAttribute("x1", x); vl.setAttribute("x2", x); vl.style.display = "";
+function selPoint(box, i) {
+  const p = box && box._pts && box._pts[i];
+  if (!p || !box._geo) return;
+  chartSel[box.id] = p.t;
+  const {X, Y, W} = box._geo, x = X(p.ts);
+  const vl = box.querySelector(".vl"); vl.setAttribute("x1", x); vl.setAttribute("x2", x); vl.style.display = "";
+  const dot = box.querySelector(".sel"); dot.setAttribute("cx", x); dot.setAttribute("cy", Y(p.d)); dot.classList.toggle("gap", p.gap); dot.style.display = "";
   const tip = box.querySelector(".ctip");
-  tip.innerHTML = `${kstDH.format(new Date(p.ts))}<br>증감 <b>${sgn(p.d)}</b><br><small>팔로워 ${num(p.f)}명</small>`;
+  tip.innerHTML = `${fullT(p.ts)}${p.gap ? ` <small>(${num(p.gapMin)}분 공백 후)</small>` : ""}<br>증감 <b class="${p.d > 0 ? "up" : p.d < 0 ? "dn" : "zz"}">${sgn(p.d, box._c.dec)}</b>${p.gap ? ` <small>공백 동안 합계</small>` : ""}<br><small>${box._c.abs(p.v)}</small>` +
+    (box._c.notes && p.np > 0 ? `<br><small>새 게시물 ${num(p.np)}개 추가 — 반응 0에서 시작해 평균이 내려갈 수 있어요</small>` : "") +
+    (box._c.notes && p.cov ? `<br><small>인사이트 수집 게시물 ${num(p.cov[0])}→${num(p.cov[1])}개 — 공유·저장 평균이 바뀌어 평균이 움직일 수 있어요</small>` : "");
   tip.style.display = "block";
-  const scale = box.querySelector("svg").getBoundingClientRect().width / W || 1, px = 10 + x * scale, tw = tip.offsetWidth;
-  tip.style.left = Math.min(Math.max(4, px - tw / 2), box.clientWidth - tw - 4) + "px";
+  const scale = box.querySelector("svg").getBoundingClientRect().width / W || 1, px = x * scale, tw = tip.offsetWidth;
+  tip.style.left = Math.min(Math.max(0, px - tw / 2), box.clientWidth - tw) + "px";
 }
-function clearPoint() {
-  const box = document.getElementById("fchart"); chartSel = null;
+function clearPoint(box) {
   if (!box) return;
-  box.querySelectorAll(".pt.on").forEach(c => c.classList.remove("on"));
-  const vl = box.querySelector("#fvl"), tip = box.querySelector(".ctip");
-  if (vl) vl.style.display = "none"; if (tip) tip.style.display = "none";
+  delete chartSel[box.id];
+  box.querySelectorAll(".vl,.sel,.ctip").forEach(el => { el.style.display = "none"; });
 }
-document.addEventListener("mouseover", e => { const h = e.target.closest && e.target.closest("#fchart [data-pi]"); if (h) selPoint(+h.dataset.pi); });
-document.addEventListener("mouseout", e => { if (e.target.closest && e.target.closest("#fchart svg") && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#fchart svg"))) clearPoint(); });
-let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => { if (tab === "instagram") drawChart(); }, 150); });
+const clearAll = () => document.querySelectorAll(".fchart").forEach(clearPoint);
+document.addEventListener("mouseover", e => { const h = e.target.closest && e.target.closest(".fchart [data-pi]"); if (h) selPoint(h.closest(".fchart"), +h.dataset.pi); });
+document.addEventListener("mouseout", e => {
+  const s = e.target.closest && e.target.closest(".fchart svg");
+  if (s && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("svg") === s)) clearPoint(s.closest(".fchart"));
+});
+let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => { if (tab === "instagram") drawCharts(); }, 150); });
 
 document.addEventListener("click", e => {
-  const hp = e.target.closest("#fchart [data-pi]");
-  if (hp) { selPoint(+hp.dataset.pi); return; }
-  if (!e.target.closest("#fchart")) clearPoint();
+  const hp = e.target.closest(".fchart [data-pi]");
+  if (hp) { selPoint(hp.closest(".fchart"), +hp.dataset.pi); return; }
+  if (!e.target.closest(".fchart")) clearAll();
+  const wb = e.target.closest("button[data-w]");
+  if (wb) { win = +wb.dataset.w; store.set("win", win); document.querySelectorAll("button[data-w]").forEach(x => x.classList.toggle("on", x === wb)); drawCharts(); return; }
   const st = e.target.closest(".has-tip");
   document.querySelectorAll(".has-tip.show").forEach(x => { if (x !== st) x.classList.remove("show"); });
   if (st) { st.classList.toggle("show"); return; }
