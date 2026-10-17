@@ -511,13 +511,11 @@ def instagram(page_id, tok):
                 (delta["likes"] + delta["comments"] + delta["shares"] + delta["saves"]) / n_posts, 2)
     save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts})
 
-    # Per-update series for the charts (one point per run, ~every 3 min; kept 30 days).
+    # Per-update series for the charts (one point per run, ~every 3 min; kept forever).
     runs = load("ig_runs.json", [])
     runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
                  "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
                  "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"]})
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    runs = [r for r in runs if r["t"] >= cutoff]
     save("ig_runs.json", runs)
 
     hist = load("ig_followers.json", [])
