@@ -64,6 +64,19 @@ def resolve_page():
     return me["id"], TOKEN
 
 
+def fb_comments(post_id, tok):
+    try:
+        return get(
+            f"{post_id}/comments", tok, limit=COMMENT_LIMIT, order="reverse_chronological",
+            fields="from,message,created_time,like_count",
+        ).get("data", [])
+    except RuntimeError as e:
+        # Some posts (e.g. shared/collab) need App Review to read comments; skip quietly.
+        if "(#10)" not in str(e):
+            errors.append(str(e))
+        return []
+
+
 def facebook(page_id, tok):
     page = get(page_id, tok, fields="id,name,fan_count,followers_count,link,picture{url}")
     posts = soft(lambda: get(
@@ -74,10 +87,7 @@ def facebook(page_id, tok):
     out = []
     for p in posts:
         has = p.get("comments", {}).get("summary", {}).get("total_count", 0)
-        comments = [] if not has else soft(lambda: get(
-            f"{p['id']}/comments", tok, limit=COMMENT_LIMIT, order="reverse_chronological",
-            fields="from,message,created_time,like_count",
-        ).get("data", []), [])
+        comments = [] if not has else fb_comments(p["id"], tok)
         out.append({
             "id": p["id"],
             "text": p.get("message", ""),
