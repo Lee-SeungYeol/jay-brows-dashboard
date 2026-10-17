@@ -82,52 +82,229 @@ def resolve_page():
 def fb_comments(post_id, tok):
     try:
         # filter=stream returns replies too, flattened in time order.
-        return paged(
+        rows = paged(
             f"{post_id}/comments", tok, COMMENT_LIMIT, limit=100, filter="stream",
-            order="reverse_chronological", fields="from,message,created_time,like_count,parent{id}",
+            order="reverse_chronological", fields="id,from,message,created_time,like_count,parent{id}",
         )
     except RuntimeError as e:
         # Some posts (e.g. shared/collab) need App Review to read comments; skip quietly.
         if "(#10)" not in str(e):
             errors.append(str(e))
         return []
+    return [{
+        "id": c.get("id"),
+        "user": (c.get("from") or {}).get("name", "익명"),
+        "text": c.get("message", ""),
+        "time": c.get("created_time"),
+        "likes": c.get("like_count", 0),
+        "reply": bool(c.get("parent")),
+        "parent": (c.get("parent") or {}).get("id"),
+    } for c in rows]
+
+
+FB_REACTIONS = ("LIKE", "LOVE", "WOW", "HAHA", "SAD", "ANGRY", "CARE")
+FB_BASE_FIELDS = ("id,message,created_time,permalink_url,full_picture,status_type,shares,"
+                  "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)")
+FB_BREAKDOWN = "".join(f",reactions.type({r}).limit(0).summary(total_count).as(r_{r.lower()})"
+                       for r in FB_REACTIONS)
+# Candidate metrics; ones the API rejects are dropped (supported set cached per day in store).
+FB_POST_METRICS = {
+    "post": "post_impressions_unique,post_impressions,post_clicks,post_reactions_by_type_total,"
+            "post_media_view,post_total_media_view_unique",
+    "video": "post_impressions_unique,post_impressions,post_clicks,post_reactions_by_type_total,"
+             "post_media_view,post_total_media_view_unique,post_video_views,post_video_views_unique,"
+             "post_video_avg_time_watched,post_video_view_time",
+}
+FB_PAGE_METRICS = ("page_impressions_unique,page_post_engagements,page_views_total,page_fan_adds,"
+                   "page_follows,page_daily_follows_unique,page_media_view,page_total_media_view_unique")
+FB_COMMENT_TTL = 3600  # latest posts: re-read comments when the count changes, else hourly
+
+
+def fb_parse(rows):
+    """{metric: value} from the last value of each insights row (+ full series for multi-day rows)."""
+    out, series = {}, {}
+    for r in rows:
+        vals = r.get("values") or []
+        if vals:
+            out[r["name"]] = vals[-1].get("value")
+            series[r["name"]] = vals
+    return out, series
+
+
+def fb_insights(obj_id, key, candidates, tok, cache, state, **params):
+    """Insights for obj_id; unsupported metrics are removed (probed one by one) and remembered for a day."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    bad = cache.setdefault("bad", {})  # objects that returned no insights at all today
+    if bad.get(obj_id) == today:
+        return {}, {}
+    ent = cache.get(key)
+    fresh = bool(ent) and ent.get("t", "")[:10] == today
+    if fresh:
+        try:
+            return fb_parse(get(f"{obj_id}/insights", tok, metric=",".join(ent["ok"]), **params).get("data", []))
+        except RuntimeError:
+            pass  # object-specific failure (e.g. shared post), or a metric just got retired
+    # Probe a bounded number of times per run, so a permission problem can't explode the call count.
+    if state["probes"].get(key, 0) >= (1 if fresh else 3):
+        bad[obj_id] = today
+        return {}, {}
+    state["probes"][key] = state["probes"].get(key, 0) + 1
+    metrics = candidates.split(",")
+    try:
+        res = fb_parse(get(f"{obj_id}/insights", tok, metric=",".join(metrics), **params).get("data", []))
+        cache[key] = {"t": today, "ok": metrics}
+        state["probes"][key] = 99  # supported set known; no more probing this run
+        return res
+    except RuntimeError:
+        pass
+    ok, out, series = [], {}, {}
+    for m in metrics:
+        try:
+            o, s = fb_parse(get(f"{obj_id}/insights", tok, metric=m, **params).get("data", []))
+        except RuntimeError:
+            continue
+        ok.append(m)
+        out.update(o)
+        series.update(s)
+    if ok:
+        cache[key] = {"t": today, "ok": ok}
+        state["probes"][key] = 99
+    else:  # nothing worked => probably this object, not the metrics
+        bad[obj_id] = today
+    return out, series
+
+
+def fb_post_row(p):
+    st = p.get("status_type") or ""
+    kind = "VIDEO" if "video" in st else "PHOTO" if "photo" in st else "SHARE" if "shared" in st else "STATUS"
+    by_type = {r: p[f"r_{r.lower()}"].get("summary", {}).get("total_count", 0)
+               for r in FB_REACTIONS if f"r_{r.lower()}" in p}
+    return {
+        "id": p["id"],
+        "kind": kind,
+        "status_type": st or None,
+        "text": p.get("message", ""),
+        "time": p.get("created_time"),
+        "url": p.get("permalink_url"),
+        "image": p.get("full_picture"),
+        "likes": p.get("reactions", {}).get("summary", {}).get("total_count", 0),
+        "reactions_by_type": by_type or None,
+        "comments_count": p.get("comments", {}).get("summary", {}).get("total_count", 0),
+        "shares": p.get("shares", {}).get("count", 0),
+    }
+
+
+def fb_all_posts(page_id, tok):
+    """Every page post; falls back to smaller pages / no reaction breakdown if the query is too heavy."""
+    last = None
+    for fields, limit in ((FB_BASE_FIELDS + FB_BREAKDOWN, 100), (FB_BASE_FIELDS + FB_BREAKDOWN, 25),
+                          (FB_BASE_FIELDS, 100)):
+        try:
+            return paged(f"{page_id}/posts", tok, 10000, limit=limit, fields=fields)
+        except RuntimeError as e:
+            last = e
+    raise last
 
 
 def facebook(page_id, tok):
     page = get(page_id, tok, fields="id,name,fan_count,followers_count,link,picture{url}")
-    posts = soft(lambda: get(
-        f"{page_id}/posts", tok, limit=POST_LIMIT,
-        fields="id,message,created_time,permalink_url,full_picture,shares,"
-               "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)",
-    ).get("data", []), [])
-    out = []
+    posts = [fb_post_row(p) for p in soft(lambda: fb_all_posts(page_id, tok), [])]
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    mcache = load("fb_metrics.json", {})
+    state = {"probes": {}}
+
+    # Insights + comments: latest POST_LIMIT every run, plus a rotating slice of older posts.
+    detail = load("fb_detail.json", {})
+    cursor = load("fb_cursor.json", 0)
+    older = posts[POST_LIMIT:]
+    if older:
+        cursor %= len(older)
+    rotating = older[cursor:cursor + ROTATE]
+    save("fb_cursor.json", cursor + ROTATE)
+    for i, p in enumerate(posts[:POST_LIMIT] + rotating):
+        d = detail.get(p["id"], {})
+        kind = "video" if p["kind"] == "VIDEO" else "post"
+        ins, _ = fb_insights(p["id"], kind, FB_POST_METRICS[kind], tok, mcache, state)
+        if ins or "insights" not in d:
+            d["insights"] = ins
+        d["checked"] = now
+        stale = True
+        if i < POST_LIMIT and d.get("comments_seen") == p["comments_count"] and d.get("comments_checked"):
+            age = (now_dt - datetime.fromisoformat(d["comments_checked"])).total_seconds()
+            stale = age > FB_COMMENT_TTL
+        if stale:
+            d["comments"] = fb_comments(p["id"], tok) if p["comments_count"] else []
+            d["comments_seen"] = p["comments_count"]
+            d["comments_checked"] = now
+        detail[p["id"]] = d
+    save("fb_detail.json", detail)
     for p in posts:
-        has = p.get("comments", {}).get("summary", {}).get("total_count", 0)
-        comments = [] if not has else fb_comments(p["id"], tok)
-        out.append({
-            "id": p["id"],
-            "text": p.get("message", ""),
-            "time": p.get("created_time"),
-            "url": p.get("permalink_url"),
-            "image": p.get("full_picture"),
-            "likes": p.get("reactions", {}).get("summary", {}).get("total_count", 0),
-            "comments_count": p.get("comments", {}).get("summary", {}).get("total_count", 0),
-            "shares": p.get("shares", {}).get("count", 0),
-            "comments": [{
-                "user": (c.get("from") or {}).get("name", "익명"),
-                "text": c.get("message", ""),
-                "time": c.get("created_time"),
-                "likes": c.get("like_count", 0),
-                "reply": bool(c.get("parent")),
-            } for c in comments],
-        })
+        d = detail.get(p["id"], {})
+        p["insights"] = d.get("insights") or None
+        p["checked"] = d.get("checked")
+        p["comments"] = d.get("comments", [])
+
+    # Page-level daily insights for the last 90 days (buckets are Meta's day, labelled by day covered).
+    _, series = fb_insights(page_id, "page", FB_PAGE_METRICS, tok, mcache, state, period="day",
+                            since=int((now_dt - timedelta(days=90)).timestamp()), until=int(now_dt.timestamp()))
+    today_utc = now_dt.date().isoformat()
+    mcache["bad"] = {k: v for k, v in mcache.get("bad", {}).items() if v == today_utc}
+    save("fb_metrics.json", mcache)
+    daily = {}
+    for m, vals in series.items():
+        for v in vals:
+            if "end_time" not in v:
+                continue
+            end = datetime.strptime(v["end_time"][:19], "%Y-%m-%dT%H:%M:%S")
+            daily.setdefault((end - timedelta(days=1)).date().isoformat(), {})[m] = v.get("value")
+    daily_list = [{"date": k, **daily[k]} for k in sorted(daily)]
+    kst = timezone(timedelta(hours=9))
+    today_kst = datetime.now(kst).date()
+    today = daily.get(today_kst.isoformat(), {})
+    yesterday = daily.get((today_kst - timedelta(days=1)).isoformat(), {})
+    if not yesterday and daily_list:  # Meta's day lags KST; fall back to the latest finished day
+        yesterday = {k: v for k, v in daily_list[-1].items() if k != "date"}
+    errors[:] = [e for e in errors if "/insights" not in e]  # unsupported metrics are expected
+
+    # All-time totals across every post (reaction/comment counts are always fresh; insights cover checked posts).
+    with_ins = [p for p in posts if p.get("insights")]
+    by_type = {r: sum((p["reactions_by_type"] or {}).get(r, 0) for p in posts) for r in FB_REACTIONS}
+    totals = {
+        "posts": len(posts),
+        "reactions": sum(p["likes"] or 0 for p in posts),
+        "comments": sum(p["comments_count"] or 0 for p in posts),
+        "shares": sum(p["shares"] or 0 for p in posts),
+        "reactions_by_type": by_type if any(p["reactions_by_type"] for p in posts) else None,
+        "insights_coverage": len(with_ins),
+    }
+    for m in ("post_impressions_unique", "post_impressions", "post_clicks", "post_media_view",
+              "post_total_media_view_unique", "post_video_views"):
+        vals = [p["insights"][m] for p in with_ins if isinstance(p["insights"].get(m), (int, float))]
+        if vals:
+            totals[m] = sum(vals)
+
+    # Hourly snapshot of the headline numbers.
+    snap = {"t": now, "followers": page.get("followers_count"), "fans": page.get("fan_count"),
+            "posts": totals["posts"], "reactions": totals["reactions"], "comments": totals["comments"],
+            "shares": totals["shares"]}
+    hist = load("fb_history.json", [])
+    if not hist or hist[-1]["t"][:13] != now[:13]:
+        hist.append(snap)
+    save("fb_history.json", hist)
+
     return {
         "name": page.get("name"),
         "link": page.get("link"),
         "picture": page.get("picture", {}).get("data", {}).get("url"),
         "followers": page.get("followers_count"),
         "fans": page.get("fan_count"),
-        "posts": out,
+        "today": today,
+        "yesterday": yesterday,
+        "daily": daily_list,
+        "totals": totals,
+        "follower_history": hist,
+        "posts": posts,
     }
 
 
