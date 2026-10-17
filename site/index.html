@@ -17,11 +17,12 @@ h1{font-size:22px;margin:0}
 .tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 14px;border-radius:999px;font:inherit;cursor:pointer}
 .tabs button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.grid+.grid{margin-top:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
 .stat b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
 .stat span{color:var(--muted);font-size:13px}
 .stat{position:relative}
-.stat .delta{font-style:normal;font-size:13px;font-weight:600;margin-left:6px;color:var(--muted)}
+.stat .delta{font-style:normal;font-size:12.5px;white-space:nowrap;font-weight:600;margin-left:6px;color:var(--muted)}
 .stat .delta.up{color:#16a34a}.stat .delta.down{color:#dc2626}
 .stat b{display:inline}
 .stat span{display:block;margin-top:4px}
@@ -153,14 +154,21 @@ const LABELS = {reach: "도달", views: "조회", saved: "저장", shares: "공�
   total_interactions: "총 반응", profile_visits: "프로필 방문", follows: "팔로우"};
 const ins = p => p.insights ? Object.entries(LABELS).filter(([k]) => p.insights[k] != null)
   .map(([k, l]) => `<span>${l} ${num(p.insights[k])}</span>`).join("") : "";
-// 기준: 약 24시간 전 스냅샷 (기록이 24시간 안 됐으면 가장 오래된 기록)
-function baseline(hist) {
-  if (!hist || hist.length < 2) return null;
-  const now = Date.parse(hist[hist.length - 1].t), target = now - 864e5;
-  let b = hist[0];
-  for (const r of hist) if (Date.parse(r.t) <= target) b = r;
-  const hrs = Math.round((now - Date.parse(b.t)) / 36e5);
-  return hrs >= 1 ? {row: b, label: hrs >= 23 ? "어제 같은 시각 대비" : `${hrs}시간 전 대비`} : null;
+// 증감 기준(항목별): (지금 − 24시간) 이전의 가장 최근 기록, 없으면 그 항목이 있는 가장 오래된 기록.
+// sameDay: '오늘 …' 값은 자정에 초기화되므로 같은 날(KST) 기록하고만 비교.
+const kstDay = ts => new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Seoul"}).format(new Date(ts));
+function baseline(hist, key, nowTs, sameDay = false) {
+  if (!hist || !key || !isFinite(nowTs)) return null;
+  let rows = hist.filter(r => r && r[key] != null && isFinite(Date.parse(r.t)) && Date.parse(r.t) <= nowTs);
+  if (sameDay) { const dd = kstDay(nowTs); rows = rows.filter(r => kstDay(Date.parse(r.t)) === dd); }
+  if (!rows.length) return null;
+  const target = nowTs - 864e5;
+  let b = rows[0];
+  for (const r of rows) if (Date.parse(r.t) <= target) b = r;
+  const mins = Math.round((nowTs - Date.parse(b.t)) / 6e4);
+  if (mins < 10) return null;
+  const label = mins >= 23 * 60 ? "어제 같은 시각 대비" : mins >= 60 ? `${Math.round(mins / 60)}시간 전 대비` : `${mins}분 전 대비`;
+  return {row: b, label};
 }
 function stat(label, v, tip = "", base = null, key = null, extra = "") {
   let delta = "";
@@ -274,7 +282,8 @@ function render() {
   const likes = posts.reduce((a, p) => a + (p.likes || 0), 0);
   const cmts = posts.reduce((a, p) => a + (p.comments_count || 0), 0);
   const t = d.today || {};
-  const b = isIG ? baseline(d.follower_history) : null, y = d.yesterday || {};
+  const H = d.follower_history || [], up = Date.parse(data.updated), nowTs = isFinite(up) ? up : (H.length ? Date.parse(H[H.length - 1].t) : NaN);
+  const B = (k, sameDay) => isIG ? baseline(H, k, nowTs, sameDay) : null, y = d.yesterday || {};
   const yd = k => y[k] != null ? `어제 하루 전체: ${num(y[k])}` : "";
   const T = d.totals || {}, tp = T.posts || 0, cov = T.insights_coverage ?? tp;
   const covNote = tp && cov < tp ? `인사이트 수집된 ${num(cov)}/${num(tp)}개 게시물 기준 (곧 전체로 채워져요)` : "";
@@ -283,18 +292,18 @@ function render() {
   const aS = cov ? (T.shares || 0) / cov : null, aV = cov ? (T.saves || 0) / cov : null;
   const avg = aL == null ? null : Math.round(aL + aC + (aS || 0) + (aV || 0));
   let h = (isIG ? `<div class="grid">` +
-      stat("오늘 도달", t.reach, "오늘 내 게시물·릴스·스토리·프로필을 한 번이라도 본 계정 수예요. 한 사람이 여러 번 봐도 1명으로 세요.", b, "reach", yd("reach")) +
-      stat("오늘 조회", t.views, "오늘 콘텐츠가 화면에 표시되거나 재생된 총 횟수예요. 같은 사람이 여러 번 보면 모두 셉니다.", b, "views", yd("views")) +
-      stat("오늘 프로필 방문", t.profile_views, "오늘 내 프로필 페이지를 연 횟수예요.", b, "profile_views", yd("profile_views")) +
-      stat("오늘 반응 계정", t.accounts_engaged, "오늘 좋아요·댓글·저장·공유·답장 등으로 반응한 계정 수예요(중복 제외).", b, "accounts_engaged", yd("accounts_engaged")) +
+      stat("오늘 도달", t.reach, "오늘 내 게시물·릴스·스토리·프로필을 한 번이라도 본 계정 수예요. 한 사람이 여러 번 봐도 1명으로 세요.", B("reach", true), "reach", yd("reach")) +
+      stat("오늘 조회", t.views, "오늘 콘텐츠가 화면에 표시되거나 재생된 총 횟수예요. 같은 사람이 여러 번 보면 모두 셉니다.", B("views", true), "views", yd("views")) +
+      stat("오늘 프로필 방문", t.profile_views, "오늘 내 프로필 페이지를 연 횟수예요.", B("profile_views", true), "profile_views", yd("profile_views")) +
+      stat("오늘 반응 계정", t.accounts_engaged, "오늘 좋아요·댓글·저장·공유·답장 등으로 반응한 계정 수예요(중복 제외).", B("accounts_engaged", true), "accounts_engaged", yd("accounts_engaged")) +
       `</div>` : "") +
     `<div class="grid">` +
     (isIG
-      ? stat("팔로워", d.followers, "나를 팔로우하는 계정 수예요.", b, "followers") +
-        stat("전체 좋아요", T.likes, `지금까지 올린 모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}가 받은 좋아요 합계예요.`, b, "likes") +
-        stat("전체 댓글", T.comments, `모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}에 달린 댓글 합계(답글 포함)예요.`, b, "comments") +
-        stat("전체 공유", T.shares, "모든 게시물·릴스가 DM·스토리 등으로 공유된 횟수 합계예요.", b, "shares", covNote) +
-        stat("전체 저장", T.saves, "모든 게시물·릴스를 사람들이 저장(북마크)한 횟수 합계예요.", b, "saves", covNote) +
+      ? stat("팔로워", d.followers, "나를 팔로우하는 계정 수예요.", B("followers"), "followers") +
+        stat("전체 좋아요", T.likes, `지금까지 올린 모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}가 받은 좋아요 합계예요.`, B("likes"), "likes") +
+        stat("전체 댓글", T.comments, `모든 게시물·릴스${tp ? ` ${num(tp)}개` : ""}에 달린 댓글 합계(답글 포함)예요.`, B("comments"), "comments") +
+        stat("전체 공유", T.shares, "모든 게시물·릴스가 DM·스토리 등으로 공유된 횟수 합계예요.", B("shares"), "shares", covNote) +
+        stat("전체 저장", T.saves, "모든 게시물·릴스를 사람들이 저장(북마크)한 횟수 합계예요.", B("saves"), "saves", covNote) +
         stat("게시물당 평균 반응", avg,
           `게시물 하나가 평균적으로 받는 반응(좋아요+댓글+공유+저장)이에요.<br>평균 좋아요 ${r1(aL)} · 댓글 ${r1(aC)} · 공유 ${r1(aS)} · 저장 ${r1(aV)}` +
           `<br><small>계산: (좋아요+댓글) ÷ 전체 게시물 수 + (공유+저장) ÷ 인사이트 수집 게시물 수. 공유·저장은 인사이트를 가져온 게시물에서만 합산되므로, 전체 게시물 수로 나누면 실제보다 작게 나와서 수집된 게시물 수로 나눠요.</small>`)
