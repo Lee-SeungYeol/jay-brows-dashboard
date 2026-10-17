@@ -585,6 +585,8 @@ def instagram(page_id, tok):
     own = totals_all["likes"] + totals_all["comments"] + (
         (totals_all["shares"] + totals_all["saves"]) * n / cov if cov else 0)
     totals_all["avg_reaction"] = round(own / n, 2) if n else None
+    # 게시물당 평균 좋아요 = likes ÷ posts, over every feed post and reel.
+    totals_all["avg_likes"] = round(totals_all["likes"] / totals_all["posts"], 2) if totals_all["posts"] else None
 
     # Hourly snapshot of the headline numbers; the page diffs against ~24h ago.
     snap = {"t": now, "followers": prof.get("followers_count"), "follows": prof.get("follows_count"),
@@ -599,7 +601,7 @@ def instagram(page_id, tok):
                  for p in with_ins}
     cur = {"followers": prof.get("followers_count"), "likes": totals_all["likes"],
            "comments": totals_all["comments"], "avg_reaction": totals_all["avg_reaction"],
-           "posts": totals_all["posts"]}
+           "posts": totals_all["posts"], "avg_likes": totals_all["avg_likes"]}
     cur.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
     last = load("ig_last.json", None)
     prev_views = (last or {}).get("views") or {}
@@ -641,7 +643,8 @@ def instagram(page_id, tok):
     runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
                  "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
                  "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"],
-                 "views_total": views_total, "avg_views": avg_views})
+                 "views_total": views_total, "avg_views": avg_views,
+                 "avg_likes": totals_all["avg_likes"]})
     save("ig_runs.json", runs)
 
     hist = load("ig_followers.json", [])
