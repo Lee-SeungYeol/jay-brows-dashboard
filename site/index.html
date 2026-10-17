@@ -645,7 +645,7 @@ function render() {
 
 /* ---------- 최근 1시간 조회수 급상승 TOP 10 (instagram.top_growth: 최근 60분 동안의 조회수 증가량) ---------- */
 const LV = {"강함": "s", "보통": "m", "약함": "w"};
-const TG_TIP = "순위 = 최근 1시간 동안 늘어난 조회수 순(3분마다 다시 계산).<br>강함 = 1시간에 조회수 1,000 이상 증가 · 보통 = 500~999 · 약함 = 500 미만.<br><small>(1시간이 안 쌓였으면 지금까지 속도를 1시간 기준으로 환산)</small>";
+const TG_TIP = "순위 = 최근 1시간 동안 늘어난 조회수 순(3분마다 다시 계산).<br>강함 = 1시간에 조회수 100 이상 증가 · 보통 = 50~99 · 약함 = 50 미만.<br><small>(1시간이 안 쌓였으면 지금까지 속도를 1시간 기준으로 환산)</small>";
 function topGrowthHTML(d) {
   const rows = d.top_growth || [], m = d.top_growth_meta || {};
   const wm = m.window_min != null ? Math.round(m.window_min) : null;

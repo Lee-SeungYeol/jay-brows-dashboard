@@ -17,7 +17,7 @@ API = "https://graph.facebook.com/" + os.environ.get("GRAPH_VERSION", "v23.0")
 TOKEN = os.environ.get("META_TOKEN", "").strip()
 POST_LIMIT = int(os.environ.get("POST_LIMIT", "25"))
 COMMENT_LIMIT = int(os.environ.get("COMMENT_LIMIT", "300"))
-LEVEL_STRONG, LEVEL_MID = 1000, 500  # 조회수 급상승 level by views gained per hour (강함 ≥ 1000, 보통 ≥ 500)
+LEVEL_STRONG, LEVEL_MID = 100, 50  # 조회수 급상승 level by views gained per hour (강함 ≥ 100, 보통 ≥ 50)
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "data.json")
 
 errors = []
