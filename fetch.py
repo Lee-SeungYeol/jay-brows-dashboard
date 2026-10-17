@@ -589,7 +589,9 @@ def instagram(page_id, tok):
     prev_views = (last or {}).get("views") or {}
     views_store = {p["id"]: views.get(p["id"], prev_views.get(p["id"])) for p in posts}
     views_store = {k: v for k, v in views_store.items() if v is not None}
-    views_total = sum(views_store.values()) if posts and len(views_store) == len(posts) else None
+    # Posts missing this run keep their previous value, so a failed call never looks like a drop.
+    # A few media never return views (API doesn't support them); they're simply not counted.
+    views_total = sum(views_store.values()) if views_store else None
     totals_all["views_total"] = views_total
     cur["views_total"] = views_total
     top_growth, top_meta = ig_growth(posts, views, last, now)
