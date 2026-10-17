@@ -170,22 +170,6 @@ def main():
          ["post_id", "post_url", "time_kst", "user", "text", "likes", "is_reply"],
          "인스타 댓글 전체 (작성 시각, 작성자, 내용, 좋아요, 답글 여부)")
 
-    st = []
-    for s in lst(ig.get("stories")):
-        if not isinstance(s, dict):
-            continue
-        r = {"id": s.get("id"), "posted_at_kst": kst(s.get("time")), "type": s.get("type"),
-             "url": s.get("url"), "live": s.get("live"), "caption": s.get("text") or ""}
-        for k, v in s.items():
-            if k not in SKIP_POST and k not in r and not isinstance(v, (list, dict)):
-                r[k] = v
-        r.update(flat(s.get("insights"), set(r), "insights_"))
-        if "checked" in s:
-            r["insights_checked_at"] = kst(s.get("checked"))
-        st.append(r)
-    emit("ig_stories.csv", st, ["id", "posted_at_kst", "type", "url", "live", "caption"],
-         "인스타 스토리 (live=1 현재 게시 중) 및 인사이트")
-
     emit("ig_tagged.csv",
          post_rows(ig.get("tagged"), ["id", "owner", "type", "posted_at_kst", "url", "caption", "likes", "comments_count"]),
          ["id", "owner", "type", "posted_at_kst", "url", "caption", "likes", "comments_count"],
