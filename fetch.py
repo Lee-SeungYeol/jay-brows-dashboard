@@ -482,6 +482,12 @@ def instagram(page_id, tok):
         both = [i for i in cur_posts if i in last.get("posts", {})]
         delta["shares"] = sum(cur_posts[i][0] - last["posts"][i][0] for i in both)
         delta["saves"] = sum(cur_posts[i][1] - last["posts"][i][1] for i in both)
+        # Insight coverage growing would move the average by itself; when no post was added,
+        # use only real new reactions instead.
+        n_posts = totals_all["posts"]
+        if n_posts and last["values"].get("posts") == n_posts and "likes" in delta and "comments" in delta:
+            delta["avg_reaction"] = round(
+                (delta["likes"] + delta["comments"] + delta["shares"] + delta["saves"]) / n_posts, 2)
     save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts})
 
     # Per-update series for the charts (last 48h; one point per run, ~every 3 min).
