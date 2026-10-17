@@ -186,6 +186,20 @@ body.lock{overflow:hidden}
 .tcl .tci .tx{overflow-wrap:anywhere}.tcl .tci small{display:block;color:var(--muted);font-size:11.5px}
 .tcl .tcm{font-size:12px;color:var(--muted);padding:4px 8px}
 @media (max-width:420px){.tcr{grid-template-columns:16px 36px minmax(0,1fr)}.tcr .tca{width:36px;height:36px;font-size:15px}.tcl{margin-left:12px}}
+/* 급상승 TOP 3 조회수 추이 */
+:root{--s1:#d62976;--s2:#2563eb;--s3:#d97706}
+@media (prefers-color-scheme:dark){:root{--s1:#f472b6;--s2:#60a5fa;--s3:#fbbf24}}
+.t3{padding:10px 10px 8px}
+.t3 .lg3{display:flex;flex-direction:column;gap:4px;margin:0 2px 6px}
+.t3 .li{display:grid;grid-template-columns:10px 22px minmax(0,1fr) auto;gap:7px;align-items:center;font-size:12.5px;color:var(--text);text-decoration:none;min-width:0}
+.t3 .li i{width:10px;height:3px;border-radius:2px;display:block}
+.t3 .li img,.t3 .li .ph{width:22px;height:22px;border-radius:5px;object-fit:cover;background:var(--line);display:block}
+.t3 .li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.t3 .li b{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.t3c .ln.s1,.t3c .pt.s1,.t3c .sel.s1{stroke:var(--s1)}.t3c .ln.s2,.t3c .sel.s2{stroke:var(--s2)}.t3c .ln.s3,.t3c .sel.s3{stroke:var(--s3)}
+.t3c .sel.s1{fill:var(--s1)}.t3c .sel.s2{fill:var(--s2)}.t3c .sel.s3{fill:var(--s3)}
+.t3c .vl{stroke:var(--text)}
+.t3c .ctip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
 /* 시간대별 평균 조회수 */
 .hv{padding:10px 12px 8px}
 .hv .sub{font-size:12px;color:var(--muted);margin:0 0 8px;min-height:18px;font-variant-numeric:tabular-nums}
@@ -502,7 +516,7 @@ function render() {
 
   indexThreads();
   h += `<h2>최근 댓글</h2><div class="cf" id="cfbar" role="group" aria-label="댓글 필터"></div><div class="card" id="thlist"></div>`;
-  if (isIG) h += topGrowthHTML(d) + `<div id="tcbox">${topCmHTML(d)}</div>`;
+  if (isIG) h += topGrowthHTML(d) + top3HTML(d) + `<div id="tcbox">${topCmHTML(d)}</div>`;
   if (isIG) h += hourlyHTML(d);
 
   if (!isIG) h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
@@ -533,6 +547,81 @@ function topGrowthHTML(d) {
         <span class="l2"><span class="bt"><span class="bf" style="width:${(r.dv / max * 100).toFixed(1)}%"></span></span><span class="lb">+${num(r.dv)} 조회${pct(r)} · ${tag}</span></span></span>
       <span class="lvw">${r.per_hour != null ? `<small class="rx">시간당 +${num(Math.round(r.per_hour))} 조회</small>` : ""}<span class="lv ${LV[r.level] || "w"}">${esc(r.level)}</span></span></a>`).join("") + `</div>`;
 }
+
+/* ---------- 급상승 TOP 3 조회수 추이 (instagram.top3_series: 시간별 기록 + 3분 스냅샷 + 현재값) ---------- */
+const T3C = ["s1", "s2", "s3"];
+const t3Series = d => (d.top3_series || []).map((s, i) => ({...s, c: T3C[i],
+  pts: (s.points || []).map(([t, v]) => ({ts: Date.parse(t), v})).filter(p => isFinite(p.ts) && p.v != null).sort((a, b) => a.ts - b.ts)}));
+function top3HTML(d) {
+  const S = t3Series(d);
+  const head = `<h2>급상승 TOP 3 조회수 추이</h2>`;
+  if (!S.length || Math.max(...S.map(s => s.pts.length)) < 2) return head + `<div class="card t3"><div class="fchart t3c"><div class="msg">조회수 기록이 쌓이는 중이에요</div></div></div>`;
+  return head + `<div class="card t3"><div class="lg3">` + S.map(s => {
+    const cur = s.pts.length ? s.pts[s.pts.length - 1].v : null;
+    return `<a class="li" href="${esc(s.url || "#")}" target="_blank" rel="noopener" title="${esc(s.text)}"><i style="background:var(--${s.c})"></i>${s.image ? `<img loading="lazy" src="${esc(s.image)}" alt="" onerror="this.style.visibility='hidden'">` : `<span class="ph"></span>`}<span>${esc(s.text) || (s.kind === "REELS" ? "(릴스)" : "(내용 없음)")}</span><b>${cur != null ? num(cur) : "–"}</b></a>`;
+  }).join("") + `</div><div class="fchart t3c" id="t3chart"></div></div>`;
+}
+function drawTop3() {
+  const box = document.getElementById("t3chart");
+  if (!box || !data || !data.instagram) return;
+  const S = t3Series(data.instagram).filter(s => s.pts.length);
+  const all = [...new Set(S.flatMap(s => s.pts.map(p => p.ts)))].sort((a, b) => a - b);
+  if (all.length < 2) { box.innerHTML = `<div class="msg">조회수 기록이 쌓이는 중이에요</div>`; box._geo = null; return; }
+  const W = Math.max(260, box.clientWidth), H = W < 480 ? 150 : 170;
+  const L = 54, R = 10, TP = 8, B = 30, pw = W - L - R, ph = H - TP - B;
+  const t0 = all[0], t1 = all[all.length - 1], span = Math.max(1, t1 - t0);
+  const vals = S.flatMap(s => s.pts.map(p => p.v));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 2) { hi += 2; lo -= 2; }
+  const raw = (hi - lo) / 3, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = Math.max(1, [1, 2, 5, 10].map(m => m * mag).find(st => st >= raw));
+  const k0 = Math.floor(lo / step + 1e-9), k1 = Math.ceil(hi / step - 1e-9);
+  lo = k0 * step; hi = k1 * step;
+  const X = ts => L + (ts - t0) / span * pw, Y = v => TP + (hi - v) / (hi - lo) * ph;
+  let g = "";
+  for (let k = k0; k <= k1; k++) {
+    const v = k * step;
+    g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${num(v)}</text>`;
+  }
+  const maxLab = Math.max(2, Math.floor(pw / 70));
+  const steps = [3, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map(m => m * 6e4);
+  const every = steps.find(st => span / st <= maxLab) || steps[steps.length - 1], off = 9 * 36e5;
+  for (let ts = Math.ceil((t0 + off) / every) * every - off; ts <= t1; ts += every) {
+    const k = kst(ts);
+    g += `<text class="ax" x="${X(ts).toFixed(1)}" y="${H - 16}" text-anchor="middle">${p2(k.h)}:${p2(k.m)}</text><text class="ax" x="${X(ts).toFixed(1)}" y="${H - 3}" text-anchor="middle">${k.mo}/${k.d}</text>`;
+  }
+  const lines = S.map(s => `<path class="ln ${s.c}" d="${s.pts.map((p, i) => `${i ? "L" : "M"}${X(p.ts).toFixed(1)},${Y(p.v).toFixed(1)}`).join("")}"/>`).join("");
+  let hits = "";
+  all.forEach((ts, i) => {
+    const x = X(ts), xl = i ? (x + X(all[i - 1])) / 2 : L, xr = i < all.length - 1 ? (x + X(all[i + 1])) / 2 : W - R;
+    hits += `<rect class="hit" data-ti="${i}" x="${xl.toFixed(1)}" y="${TP}" width="${Math.max(1, xr - xl).toFixed(1)}" height="${ph}"/>`;
+  });
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="급상승 TOP 3 조회수 누적 추이">${g}<line class="vl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/>${lines}${S.map(s => `<circle class="sel ${s.c}" r="4" style="display:none"/>`).join("")}${hits}</svg><div class="ctip" style="display:none"></div>`;
+  box._geo = {X, Y, W}; box._all = all; box._S = S;
+  const si = all.indexOf(chartSel.t3chart);
+  if (si >= 0) t3Point(box, si); else delete chartSel.t3chart;
+}
+function t3Point(box, i) {
+  if (!box || !box._geo || box._all[i] == null) return;
+  const ts = box._all[i], {X, Y, W} = box._geo, x = X(ts);
+  chartSel.t3chart = ts;
+  const vl = box.querySelector(".vl"); vl.setAttribute("x1", x); vl.setAttribute("x2", x); vl.style.display = "";
+  const dots = box.querySelectorAll(".sel");
+  let rows = "";
+  box._S.forEach((s, j) => {
+    // 그 시각 이전의 가장 최근 값 (없으면 표시 안 함)
+    let p = null; for (const q of s.pts) { if (q.ts <= ts) p = q; else break; }
+    const dot = dots[j];
+    if (p) { dot.setAttribute("cx", X(p.ts)); dot.setAttribute("cy", Y(p.v)); dot.style.display = ""; } else dot.style.display = "none";
+    rows += `<br><i style="background:var(--${s.c})"></i>${esc((s.text || "").slice(0, 14)) || "게시물"} <b>${p ? num(p.v) : "–"}</b>`;
+  });
+  const tip = box.querySelector(".ctip");
+  tip.innerHTML = fullT(ts) + rows; tip.style.display = "block";
+  const scale = box.querySelector("svg").getBoundingClientRect().width / W || 1, px = x * scale, tw = tip.offsetWidth;
+  tip.style.left = Math.min(Math.max(0, px - tw / 2), box.clientWidth - tw) + "px";
+}
+document.addEventListener("mouseover", e => { const h = e.target.closest && e.target.closest("#t3chart [data-ti]"); if (h) t3Point(h.closest(".fchart"), +h.dataset.ti); });
+document.addEventListener("click", e => { const h = e.target.closest && e.target.closest("#t3chart [data-ti]"); if (h) t3Point(h.closest(".fchart"), +h.dataset.ti); });
 
 /* ---------- 댓글 많이 단 계정 TOP 10 (모든 게시물·릴스의 댓글+답글을 계정별로 집계, 내 계정 제외) ---------- */
 const TC_TIP = "수집된 모든 게시물·릴스의 댓글과 답글을 계정별로 센 순위예요(내 계정 제외). 3분마다 갱신돼요.";
@@ -608,7 +697,7 @@ function chartPoints(key, dec = 0) {
     return {t: b.t, ts: b.ts, v: b[key], d, first: !a, gap, np, gapMin: a ? Math.round((b.ts - a.ts) / 6e4) : 0, brk: !a || gap};
   })};
 }
-function drawCharts() { CHARTS.forEach(drawChart); }
+function drawCharts() { CHARTS.forEach(drawChart); drawTop3(); }
 function drawChart(c) {
   const box = document.getElementById(c.id), sum = document.getElementById(c.id + "-sum");
   if (!box || !data || !data.instagram) return;

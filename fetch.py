@@ -459,6 +459,52 @@ def ig_growth(posts, views, last, now):
     return out, meta
 
 
+def ig_views_hourly(views, now):
+    """store/ig_views_hourly.json = {"t": [KST hour ISO...], "v": {id: [views|null aligned to t]}}:
+    one snapshot per KST clock hour (first run of the hour), kept forever."""
+    kst = timezone(timedelta(hours=9))
+    hour = datetime.fromisoformat(now).astimezone(kst).replace(minute=0, second=0, microsecond=0).isoformat()
+    st = load("ig_views_hourly.json", {"t": [], "v": {}})
+    ts, vs = st.get("t") or [], st.get("v") or {}
+    if ts and ts[-1] >= hour:
+        return st
+    n = len(ts)
+    for k in vs:
+        vs[k].append(views.get(k))
+    for k, v in views.items():
+        if k not in vs and v is not None:
+            vs[k] = [None] * n + [v]
+    ts.append(hour)
+    st = {"t": ts, "v": vs}
+    save("ig_views_hourly.json", st)
+    return st
+
+
+def ig_top3_series(top_growth, hourly, views, now):
+    """Cumulative views over time for the top 3 of top_growth: hourly history (last 7 days)
+    + every 3-min snapshot in ig_views_window.json + the current value."""
+    tnow = datetime.fromisoformat(now)
+    snaps = load("ig_views_window.json", [])
+    w0 = min((datetime.fromisoformat(s["t"]) for s in snaps), default=tnow)
+    out = []
+    for r in top_growth[:3]:
+        pid, pts = r["id"], {}
+        for t, v in zip(hourly.get("t") or [], (hourly.get("v") or {}).get(pid) or []):
+            dt = datetime.fromisoformat(t)
+            if v is not None and (tnow - dt).total_seconds() <= 7 * 86400 and dt < w0:
+                pts[dt] = v
+        for s in snaps:
+            v = (s.get("views") or {}).get(pid)
+            if v is not None:
+                pts[datetime.fromisoformat(s["t"])] = v
+        if views.get(pid) is not None:
+            pts[tnow] = views[pid]
+        out.append({"id": pid, "text": (r.get("text") or "")[:40], "url": r.get("url"), "image": r.get("image"),
+                    "kind": r.get("kind"),
+                    "points": [[dt.isoformat(), v] for dt, v in sorted(pts.items(), key=lambda x: x[0])]})
+    return out
+
+
 DAILY_KEYS = ("reach", "views", "profile_views", "accounts_engaged")
 DELTA_KEYS = ("followers", "likes", "comments", "shares", "saves", "avg_reaction", "avg_likes",
               "avg_views", "views_total", "posts") + DAILY_KEYS
@@ -700,6 +746,7 @@ def instagram(page_id, tok):
     cur["avg_views"] = avg_views
     top_growth, top_meta = ig_growth(posts, views, last, now)
     top_meta.update({"views_fetched": len(views), "views_seconds": views_sec})
+    top3 = soft(lambda: ig_top3_series(top_growth, ig_views_hourly(views_store, now), views_store, now), [])
     save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts, "views": views_store})
 
     # Per-update series for the charts (one point per run, ~every 3 min; kept forever).
@@ -733,6 +780,7 @@ def instagram(page_id, tok):
         "delta": delta,
         "top_growth": top_growth,
         "top_growth_meta": top_meta,
+        "top3_series": top3,
         "runs": runs,
         "hourly_views": hourly,
         "follower_history": hist,
