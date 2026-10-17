@@ -648,12 +648,15 @@ function topGrowthHTML(d) {
 
 /* ---------- 댓글 많이 단 계정 TOP 10 (모든 게시물·릴스의 댓글+답글을 계정별로 집계, 내 계정 제외) ---------- */
 const TC_TIP = "수집된 모든 게시물·릴스의 댓글과 답글을 계정별로 센 순위예요(내 계정 제외). 3분마다 갱신돼요.";
+// 순위에서 뺄 내 관련 계정(소문자 비교) — 필요하면 여기에 추가. instagram.username은 자동 제외
+const OWN_ACCOUNTS = ["sps_brows_academy"];
+const tcOwn = u => isOwner(u) || OWN_ACCOUNTS.some(a => String(a).toLowerCase() === String(u).toLowerCase());
 const tcOpen = new Set();  // 펼친 계정 — 1분 새로고침 후에도 유지
 function topCommenters(d) {
   const m = new Map();
   (d.posts || []).forEach(p => threadsOf(p).forEach(t => [t.root, ...t.replies].forEach(c => {
     const u = String(c.user || "").trim();
-    if (!u || isOwner(u)) return;
+    if (!u || tcOwn(u)) return;
     const k = u.toLowerCase();
     let a = m.get(k);
     if (!a) m.set(k, a = {user: u, n: 0, posts: new Set(), last: 0, th: 0, got: 0, cs: []});
