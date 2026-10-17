@@ -594,6 +594,10 @@ def instagram(page_id, tok):
     views_total = sum(views_store.values()) if views_store else None
     totals_all["views_total"] = views_total
     cur["views_total"] = views_total
+    # 게시물당 평균 조회수 = views_total ÷ number of feed posts + reels counted in it.
+    avg_views = round(views_total / len(views_store), 2) if views_store else None
+    totals_all["avg_views"] = avg_views
+    cur["avg_views"] = avg_views
     top_growth, top_meta = ig_growth(posts, views, last, now)
     top_meta.update({"views_fetched": len(views), "views_seconds": views_sec})
     delta = None
@@ -621,7 +625,7 @@ def instagram(page_id, tok):
     runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"],
                  "shares": totals_all["shares"], "saves": totals_all["saves"], "posts": totals_all["posts"],
                  "avg_reaction": totals_all["avg_reaction"], "coverage": totals_all["insights_coverage"],
-                 "views_total": views_total})
+                 "views_total": views_total, "avg_views": avg_views})
     save("ig_runs.json", runs)
 
     hist = load("ig_followers.json", [])

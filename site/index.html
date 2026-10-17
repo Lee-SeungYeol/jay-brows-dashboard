@@ -648,6 +648,7 @@ const CHARTS = [
   {id: "fchart", key: "followers", title: "팔로워 수", abs: v => `팔로워 ${num(v)}명`},
   {id: "lchart", key: "likes", title: "전체 좋아요", abs: v => `전체 좋아요 ${num(v)}`},
   {id: "vchart", key: "views_total", title: "전체 조회수", abs: v => `전체 조회수 ${num(v)}`},
+  {id: "avchart", key: "avg_views", title: "게시물당 평균 조회수", dec: 2, tip: "게시물당 평균 조회수 = 전체 조회수 ÷ 게시물 수(피드 게시글 + 릴스). 새 게시물이 올라오면 조회수 0에서 시작해 평균이 잠깐 내려갈 수 있어요.", notes: true, abs: v => `평균 조회수 ${v.toFixed(2)}`},
   {id: "achart", key: "avg_reaction", title: "게시물당 평균 반응", dec: 2, tip: AVG_TIP, notes: true, abs: v => `평균 반응 ${v.toFixed(2)}`},
 ];
 const chartSel = {};   // 차트 id → 선택된 점의 시각(t) — 새로고침 후에도 유지
