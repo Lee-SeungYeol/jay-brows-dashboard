@@ -400,7 +400,9 @@ def instagram(page_id, tok):
         old = detail.get(p["id"], {})
         d = {"insights": insights(p["id"], p["kind"], tok) or old.get("insights"), "checked": now}
         # Comments: re-read when the count changed, otherwise at most hourly.
-        fresh = (old.get("comments_seen") == p["comments_count"] and old.get("comments_checked", "")[:13] == now[:13])
+        # Cached lists from before comment ids were collected count as stale (needed for reply deep links).
+        fresh = (old.get("comments_seen") == p["comments_count"] and old.get("comments_checked", "")[:13] == now[:13]
+                 and all(c.get("id") for c in old.get("comments", [])))
         if fresh:
             d.update({k: old[k] for k in ("comments", "comments_seen", "comments_checked") if k in old})
         else:
@@ -551,14 +553,16 @@ def ig_comments(media_id, tok):
     out = []
     rows = paged(
         f"{media_id}/comments", tok, COMMENT_LIMIT, limit=50,
-        fields="username,text,timestamp,like_count,replies{username,text,timestamp,like_count}",
+        fields="id,username,text,timestamp,like_count,replies{id,username,text,timestamp,like_count}",
     )
     for c in rows:
         out.append({"user": c.get("username", ""), "text": c.get("text", ""),
-                    "time": c.get("timestamp"), "likes": c.get("like_count", 0), "reply": False})
+                    "time": c.get("timestamp"), "likes": c.get("like_count", 0), "reply": False,
+                    "id": c.get("id")})
         for r in c.get("replies", {}).get("data", []):
             out.append({"user": r.get("username", ""), "text": r.get("text", ""),
-                        "time": r.get("timestamp"), "likes": r.get("like_count", 0), "reply": True})
+                        "time": r.get("timestamp"), "likes": r.get("like_count", 0), "reply": True,
+                        "id": r.get("id"), "parent": c.get("id")})
     return out[:COMMENT_LIMIT]
 
 
