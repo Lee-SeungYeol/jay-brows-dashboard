@@ -108,6 +108,10 @@ td{overflow-wrap:anywhere}
 .fchart .gl{stroke:var(--line);stroke-width:1}
 .fchart .zl{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;opacity:.8}
 .fchart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.fchart .ar{stroke:none}
+.fchart .ag0{stop-color:var(--accent);stop-opacity:.25}
+.fchart .ag1{stop-color:var(--accent);stop-opacity:0}
+@media (prefers-color-scheme:dark){.fchart .ag0{stop-opacity:.32}}
 .fchart .pt{fill:var(--accent);stroke:none}
 .fchart .pt.gap{fill:var(--card);stroke:var(--accent);stroke-width:2}
 .fchart .sel{fill:var(--accent);stroke:var(--card);stroke-width:2}
@@ -520,7 +524,12 @@ function drawChart(c) {
     g += `<text class="ax" x="${X(ts).toFixed(1)}" y="${H - 16}" text-anchor="middle">${p2(k.h)}:${p2(k.m)}</text><text class="ax" x="${X(ts).toFixed(1)}" y="${H - 3}" text-anchor="middle">${k.mo}/${k.d}</text>`;
   }
   const line = pts.map(p => `${p.brk ? "M" : "L"}${X(p.ts).toFixed(1)},${Y(p.v).toFixed(1)}`).join("");
-  const dense = pts.length > 120; let lastNote = -Infinity, dots = "", hits = "";
+  // 누적 영역: 공백(gap)마다 영역을 닫고 새로 시작
+  const base = (TP + ph).toFixed(1), segs = [];
+  pts.forEach(p => { if (p.brk || !segs.length) segs.push([]); segs[segs.length - 1].push(p); });
+  const area = segs.filter(s => s.length > 1).map(s => `M${X(s[0].ts).toFixed(1)},${base}` + s.map(p => `L${X(p.ts).toFixed(1)},${Y(p.v).toFixed(1)}`).join("") + `L${X(s[s.length - 1].ts).toFixed(1)},${base}Z`).join("");
+  const gid = `ag-${c.id}`;
+  const dense = pts.length > 60; let lastNote = -Infinity, dots = "", hits = "";
   pts.forEach((p, i) => {
     const x = X(p.ts), y = Y(p.v).toFixed(1), xl = i ? (x + X(pts[i - 1].ts)) / 2 : L, xr = i < pts.length - 1 ? (x + X(pts[i + 1].ts)) / 2 : W - R;
     if (c.notes && p.np > 0 && x - lastNote > 30) { lastNote = x; g += `<text class="nt" x="${x.toFixed(1)}" y="${TP + 8}" text-anchor="middle">새 글</text>`; }
@@ -528,7 +537,7 @@ function drawChart(c) {
     else if (!dense) dots += `<circle class="pt" cx="${x.toFixed(1)}" cy="${y}" r="2.5"/>`;
     hits += `<rect class="hit" data-pi="${i}" x="${xl.toFixed(1)}" y="${TP}" width="${Math.max(1, xr - xl).toFixed(1)}" height="${ph}"/>`;
   });
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${c.title} 추이">${g}<line class="vl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/><path class="ln" d="${line}"/>${dots}<circle class="sel" r="4.5" style="display:none"/>${hits}</svg><div class="ctip" style="display:none"></div>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${c.title} 누적 추이"><defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="0" y1="${TP}" x2="0" y2="${base}"><stop class="ag0" offset="0"/><stop class="ag1" offset="1"/></linearGradient></defs>${g}<path class="ar" fill="url(#${gid})" d="${area}"/><line class="vl" x1="0" x2="0" y1="${TP}" y2="${TP + ph}" style="display:none"/><path class="ln" d="${line}"/>${dots}<circle class="sel" r="4.5" style="display:none"/>${hits}</svg><div class="ctip" style="display:none"></div>`;
   box._geo = {X, Y, W};
   const si = pts.findIndex(p => p.t === chartSel[c.id]);
   if (si >= 0) selPoint(box, si); else delete chartSel[c.id];
