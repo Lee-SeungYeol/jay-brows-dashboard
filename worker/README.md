@@ -4,6 +4,7 @@
 
 - `POST /check` — 비밀번호 확인 (`Authorization: Bearer <REPLY_PASSWORD>`) → `{ok:true}`
 - `POST /reply` — `{comment_id, message}` → Graph API `/{comment_id}/replies` 로 답글 → `{ok:true,id}` / `{ok:false,error}`
+- `POST /like` — `{comment_id, unlike?:true}` → Graph API `POST`/`DELETE /{IG_USER_ID}/likes` `{comment_id}` (v26.0, 토큰은 Authorization 헤더) → `{ok:true}` / `{ok:false,error}`. 토큰에 `instagram_basic` + `instagram_manage_engagement` 권한 필요. IG 계정 id는 `IG_USER_ID` 변수(wrangler.toml `[vars]`)가 있으면 사용, 없으면 토큰으로 자동 조회. 대시보드에서는 `site/index.html`의 `LIKE_ENABLED = true`로 켜요.
 - CORS는 `ALLOWED_ORIGIN`(https://lee-seungyeol.github.io)만 허용, 비밀번호 틀리면 1초 지연 후 401.
 
 ## 배포

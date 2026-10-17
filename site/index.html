@@ -178,6 +178,8 @@ body.lock{overflow:hidden}
 .rpx .st{min-height:1em;font-size:12.5px}
 .rpx .st.ok{color:#16a34a}.rpx .st.err{color:#dc2626}
 .rpx.off{color:var(--muted);text-align:center}
+.lkb{border:0;background:none;font:inherit;font-size:12px;color:var(--muted);cursor:pointer;padding:2px 4px;margin:-2px -4px;border-radius:6px}
+.lkb.on{color:#e11d48}.lkb:disabled{opacity:.6;cursor:default}
 .rpt{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0 0 0 6px}
 .ic.tg .m{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:10px;outline-offset:2px}
 .sent{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--line);color:var(--muted);margin-left:5px}
@@ -225,6 +227,8 @@ body.lock{overflow:hidden}
 <script>
 // 답글 Worker 주소 (비어 있으면 대시보드 답글 기능 숨김). 예: "https://jay-brows-reply.xxx.workers.dev"
 const REPLY_API = "https://jay-brows-reply.stl990726.workers.dev";
+// 댓글 좋아요(♥) 버튼: Meta 토큰에 instagram_manage_engagement 권한이 생기면 true로
+const LIKE_ENABLED = false;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = n => n == null ? "–" : Number(n).toLocaleString("ko-KR");
 // 간단한 한국식 단위: 1.2만, 3.4억
@@ -353,7 +357,7 @@ const icHTML = (c, rp, extra = "", tk) => { const me = isOwner(c.user), u = Stri
   if (tk != null && rpOn()) extra += `<button class="rpt" data-rpk="${esc(tk)}" aria-label="${esc(u)}에게 답글">↳ 답글</button>`;
   if (c._sent) extra += `<span class="sent">전송됨</span>`;
   return `<div class="ic${rp ? " rp" : ""}${me ? " me" : ""}${tk != null && rpOn() && rpS.key === tk ? " tg" : ""}"><span class="av" style="background:${me ? "var(--accent)" : avColor(u)}">${esc(([...u.replace(/^[@._]+/, "")][0] || "?").toUpperCase())}</span>
-    <div class="m">${me ? `<span class="atag">작성자</span>` : ""}<b>${esc(u)}</b>${esc(c.text)}<small>${rel(c.time)} · ${when(c.time)}${c.likes ? ` · ♥ ${num(c.likes)}` : ""}</small>${extra}</div></div>`; };
+    <div class="m">${me ? `<span class="atag">작성자</span>` : ""}<b>${esc(u)}</b>${esc(c.text)}<small>${rel(c.time)} · ${when(c.time)}${likeOn(c) ? ` · ${likeBtn(c)}` : c.likes ? ` · ♥ ${num(c.likes)}` : ""}</small>${extra}</div></div>`; };
 function showTh(id) {
   const t = thMap.get(id), m = document.getElementById("cm");
   if (!t) { closeTh(); return; }
@@ -477,6 +481,47 @@ document.addEventListener("click", e => {
     e.stopPropagation(); pwMem = ""; pw.set(""); rpS.st = ""; rpS.cls = "";
     const t = thMap.get(openTh); if (t) rpBox(t, true);
   }
+}, true);
+/* ---------- 댓글 좋아요 (Worker /like) ---------- */
+// liked: 댓글 id → 누를 당시 수집된 좋아요 수 (다음 수집에 반영되면 +1을 중복으로 더하지 않음)
+const likeStore = {
+  get() { try { return JSON.parse(localStorage.getItem("jb:liked") || "{}") || {}; } catch (e) { return {}; } },
+  set(o) { try { localStorage.setItem("jb:liked", JSON.stringify(o)); } catch (e) {} }
+};
+let liked = likeStore.get(), likeBusy = new Set();
+const likeOn = c => LIKE_ENABLED && rpOn() && !!c.id;
+const likeCount = c => { const n = c.likes || 0, b = liked[c.id]; return b == null ? n : Math.max(n, b + 1); };
+const likeBtn = c => { const on = liked[c.id] != null, n = likeCount(c);
+  return `<button class="lkb${on ? " on" : ""}" type="button" data-lk="${esc(c.id)}" aria-pressed="${on}" aria-label="${on ? "좋아요 취소" : "좋아요"}"${likeBusy.has(String(c.id)) ? " disabled" : ""}>${on ? "♥" : "♡"}${n ? " " + num(n) : ""}</button>`; };
+function findC(id) {
+  const t = thMap.get(openTh); if (!t) return null;
+  return [t.root, ...t.replies].find(c => String(c.id) === id) || null;
+}
+async function likeToggle(id) {
+  const c = findC(id); if (!c || likeBusy.has(id)) return;
+  if (!pwMem) {
+    rpStatus("좋아요를 누르려면 먼저 비밀번호를 입력해 주세요", "err");
+    const f = document.getElementById("rppw"); if (f) f.focus();
+    return;
+  }
+  const unlike = liked[id] != null, prev = liked[id];
+  // 낙관적 반영: 바로 채우고/비우고, 실패하면 되돌림
+  if (unlike) delete liked[id]; else liked[id] = c.likes || 0;
+  likeStore.set(liked); likeBusy.add(id); showTh(openTh);
+  let msg = "";
+  try {
+    const r = await rpCall("/like", {comment_id: id, unlike}, pwMem);
+    if (!r.ok) msg = r.status === 401 ? "비밀번호가 맞지 않아요. 다시 입력해 주세요" : (unlike ? "좋아요 취소 실패: " : "좋아요 실패: ") + (r.error || "알 수 없는 오류");
+    if (r.status === 401) { pwMem = ""; pw.set(""); }
+  } catch (e) { msg = "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요"; }
+  likeBusy.delete(id);
+  if (msg) { if (unlike) liked[id] = prev; else delete liked[id]; likeStore.set(liked); }
+  const t = thMap.get(openTh);
+  if (t) { showTh(openTh); if (msg) { rpBox(t, true); rpStatus(msg, "err"); } }
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-lk]");
+  if (b) { e.stopPropagation(); likeToggle(b.dataset.lk); }
 }, true);
 function closeTh() { openTh = null; document.getElementById("cm").classList.remove("on"); document.body.classList.remove("lock"); }
 
