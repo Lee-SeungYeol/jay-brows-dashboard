@@ -477,6 +477,37 @@ def instagram(page_id, tok):
             "media": prof.get("media_count"), "likes": totals_all["likes"], "comments": totals_all["comments"],
             "shares": totals_all["shares"], "saves": totals_all["saves"]}
     snap.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
+    # Change since the previous run (the page shows it as +N next to each number).
+    # Shares/saves only compare posts that had insights both times, so filling in
+    # older posts' insights doesn't look like new activity.
+    day = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+    cur_posts = {p["id"]: [p["insights"].get("shares") or 0, p["insights"].get("saved") or 0]
+                 for p in with_ins}
+    cur = {"followers": prof.get("followers_count"), "likes": totals_all["likes"],
+           "comments": totals_all["comments"]}
+    cur.update({k: totals.get(k) for k in ("reach", "views", "profile_views", "accounts_engaged")})
+    last = load("ig_last.json", None)
+    delta = None
+    if last:
+        delta = {"since": last["t"]}
+        for k, v in cur.items():
+            if v is None or last["values"].get(k) is None:
+                continue
+            if k in ("reach", "views", "profile_views", "accounts_engaged") and last.get("day") != day:
+                continue  # daily metrics reset at midnight
+            delta[k] = v - last["values"][k]
+        both = [i for i in cur_posts if i in last.get("posts", {})]
+        delta["shares"] = sum(cur_posts[i][0] - last["posts"][i][0] for i in both)
+        delta["saves"] = sum(cur_posts[i][1] - last["posts"][i][1] for i in both)
+    save("ig_last.json", {"t": now, "day": day, "values": cur, "posts": cur_posts})
+
+    # Per-update series for the charts (last 48h; one point per run, ~every 3 min).
+    runs = load("ig_runs.json", [])
+    runs.append({"t": now, "followers": cur["followers"], "likes": cur["likes"], "comments": cur["comments"]})
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+    runs = [r for r in runs if r["t"] >= cutoff]
+    save("ig_runs.json", runs)
+
     hist = load("ig_followers.json", [])
     if not hist or hist[-1]["t"][:13] != now[:13]:
         hist.append(snap)
@@ -493,6 +524,8 @@ def instagram(page_id, tok):
         "today": totals,
         "yesterday": yesterday,
         "totals": totals_all,
+        "delta": delta,
+        "runs": runs,
         "follower_history": hist,
         "posts": posts,
         "stories": story_list,

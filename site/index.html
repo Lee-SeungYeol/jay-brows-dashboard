@@ -154,26 +154,10 @@ const LABELS = {reach: "도달", views: "조회", saved: "저장", shares: "공�
   total_interactions: "총 반응", profile_visits: "프로필 방문", follows: "팔로우"};
 const ins = p => p.insights ? Object.entries(LABELS).filter(([k]) => p.insights[k] != null)
   .map(([k, l]) => `<span>${l} ${num(p.insights[k])}</span>`).join("") : "";
-// 증감 기준(항목별): (지금 − 24시간) 이전의 가장 최근 기록, 없으면 그 항목이 있는 가장 오래된 기록.
-// sameDay: '오늘 …' 값은 자정에 초기화되므로 같은 날(KST) 기록하고만 비교.
-const kstDay = ts => new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Seoul"}).format(new Date(ts));
-function baseline(hist, key, nowTs, sameDay = false) {
-  if (!hist || !key || !isFinite(nowTs)) return null;
-  let rows = hist.filter(r => r && r[key] != null && isFinite(Date.parse(r.t)) && Date.parse(r.t) <= nowTs);
-  if (sameDay) { const dd = kstDay(nowTs); rows = rows.filter(r => kstDay(Date.parse(r.t)) === dd); }
-  if (!rows.length) return null;
-  const target = nowTs - 864e5;
-  let b = rows[0];
-  for (const r of rows) if (Date.parse(r.t) <= target) b = r;
-  const mins = Math.round((nowTs - Date.parse(b.t)) / 6e4);
-  if (mins < 10) return null;
-  const label = mins >= 23 * 60 ? "어제 같은 시각 대비" : mins >= 60 ? `${Math.round(mins / 60)}시간 전 대비` : `${mins}분 전 대비`;
-  return {row: b, label};
-}
 function stat(label, v, tip = "", base = null, key = null, extra = "") {
   let delta = "";
-  if (base && key && v != null && base.row[key] != null) {
-    const dv = v - base.row[key];
+  if (base && v != null && base.dv != null) {
+    const dv = base.dv;
     delta = `<em class="delta ${dv > 0 ? "up" : dv < 0 ? "down" : ""}" title="${base.label}">${dv > 0 ? "+" : dv < 0 ? "−" : "±"}${num(Math.abs(dv))}</em>`;
   }
   const t = tip ? `${tip}${delta ? `<br><small>증감: ${base.label}</small>` : ""}${extra ? `<br><small>${extra}</small>` : ""}` : "";
@@ -283,7 +267,9 @@ function render() {
   const cmts = posts.reduce((a, p) => a + (p.comments_count || 0), 0);
   const t = d.today || {};
   const H = d.follower_history || [], up = Date.parse(data.updated), nowTs = isFinite(up) ? up : (H.length ? Date.parse(H[H.length - 1].t) : NaN);
-  const B = (k, sameDay) => isIG ? baseline(H, k, nowTs, sameDay) : null, y = d.yesterday || {};
+  // 증감: 직전 데이터 업데이트 대비 (fetch.py가 계산한 d.delta)
+  const D = d.delta || {}, dMin = D.since && isFinite(nowTs) ? Math.max(1, Math.round((nowTs - Date.parse(D.since)) / 6e4)) : null;
+  const B = k => isIG && D[k] != null && dMin ? {dv: D[k], label: `직전 업데이트(${dMin}분 전) 대비`} : null, y = d.yesterday || {};
   const yd = k => y[k] != null ? `어제 하루 전체: ${num(y[k])}` : "";
   const T = d.totals || {}, tp = T.posts || 0, cov = T.insights_coverage ?? tp;
   const covNote = tp && cov < tp ? `인사이트 수집된 ${num(cov)}/${num(tp)}개 게시물 기준 (곧 전체로 채워져요)` : "";
