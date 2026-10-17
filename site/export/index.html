@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>데이터 내보내기 (CSV)</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1b1d21;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb}
+@media (prefers-color-scheme:dark){:root{--bg:#111316;--card:#1b1e23;--fg:#e8eaed;--muted:#9aa0a6;--line:#2c3036;--accent:#7aa7ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:720px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+ul{list-style:none;margin:0;padding:0}
+li{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+a{color:var(--accent);font-weight:600;text-decoration:none;word-break:break-all}
+a:hover{text-decoration:underline}
+.n{color:var(--muted);font-size:13px;white-space:nowrap}
+.d{color:var(--muted);font-size:13px;margin-top:2px}
+.tip{color:var(--muted);font-size:12.5px;margin-top:18px}
+</style>
+</head>
+<body>
+<main>
+<h1>데이터 내보내기 (CSV)</h1>
+<p class="sub" id="meta">불러오는 중…</p>
+<ul id="list"></ul>
+<p class="tip">엑셀·구글 시트에서 바로 열 수 있습니다 (UTF-8 BOM, 한글 정상 표시). 시각은 모두 한국시간(KST). 약 몇 분마다 자동 갱신됩니다.</p>
+</main>
+<script>
+fetch('index.json?ts=' + Date.now()).then(function (r) { return r.json(); }).then(function (ix) {
+  document.getElementById('meta').textContent = '마지막 생성: ' + (ix.generated_at_kst || '-') + ' (KST)';
+  var ul = document.getElementById('list');
+  (ix.files || []).forEach(function (f) {
+    var li = document.createElement('li');
+    var row = document.createElement('div'); row.className = 'row';
+    var a = document.createElement('a'); a.href = f.name; a.textContent = f.name; a.setAttribute('download', f.name);
+    var n = document.createElement('span'); n.className = 'n'; n.textContent = Number(f.rows || 0).toLocaleString('ko-KR') + '행';
+    row.appendChild(a); row.appendChild(n);
+    var d = document.createElement('div'); d.className = 'd'; d.textContent = f.desc || '';
+    li.appendChild(row); li.appendChild(d); ul.appendChild(li);
+  });
+}).catch(function () {
+  document.getElementById('meta').textContent = '목록을 불러오지 못했습니다. 잠시 후 새로고침 해주세요.';
+});
+</script>
+</body>
+</html>
