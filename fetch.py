@@ -314,7 +314,6 @@ ROTATE = int(os.environ.get("ROTATE", "25"))  # older posts refreshed in full pe
 POST_METRICS = {
     "REELS": "reach,saved,shares,views,total_interactions,likes,comments,ig_reels_avg_watch_time,ig_reels_video_view_total_time",
     "FEED": "reach,saved,shares,views,total_interactions,likes,comments,profile_visits,follows",
-    "STORY": "reach,replies,shares,views,total_interactions,follows,profile_visits,navigation",
 }
 
 
@@ -398,29 +397,6 @@ def instagram(page_id, tok):
         p.update(detail.get(p["id"], {}))
     save("ig_detail.json", detail)
 
-    # Stories vanish after 24h, so keep every one we have seen.
-    stories = load("ig_stories.json", {})
-    live = soft(lambda: paged(f"{ig_id}/stories", tok, 200, limit=50,
-                              fields="id,media_type,media_url,thumbnail_url,permalink,timestamp,caption"), [])
-    live_ids = set()
-    for st in live:
-        live_ids.add(st["id"])
-        row = stories.get(st["id"], {})
-        row.update({
-            "id": st["id"], "type": st.get("media_type"), "time": st.get("timestamp"),
-            "url": st.get("permalink"), "image": st.get("thumbnail_url") or st.get("media_url"),
-            "text": st.get("caption", ""),
-        })
-        ins = insights(st["id"], "STORY", tok)
-        if ins:
-            row["insights"] = ins  # last values seen before it expired
-        row["checked"] = now
-        stories[st["id"]] = row
-    save("ig_stories.json", stories)
-    story_list = sorted(stories.values(), key=lambda r: r.get("time") or "", reverse=True)
-    for r in story_list:
-        r["live"] = r["id"] in live_ids
-
     # Posts other accounts tagged us in (most collab posts we don't own show up here).
     # The full list is slow (API only allows small pages), so refresh it hourly.
     tag_cache = load("ig_tagged.json", {"t": "", "rows": []})
@@ -471,24 +447,12 @@ def instagram(page_id, tok):
         "saves": sum(p["insights"].get("saved") or 0 for p in with_ins),
         "insights_coverage": len(with_ins),
     }
-    # 게시물당 평균 반응 = every reaction we can see ÷ every item, across
-    #   own posts+reels (likes+comments+shares+saves),
-    #   stories (total_interactions, else replies+shares), and
-    #   posts others tagged/collabed us in (likes+comments).
-    # Own shares/saves are scaled up from the posts whose insights we have until every post is covered.
+    # 게시물당 평균 반응 = (likes + comments + shares + saves) ÷ posts, over every post and reel we own.
+    # Shares/saves are scaled up from the posts whose insights we have until every post is covered.
     n, cov = totals_all["posts"], totals_all["insights_coverage"]
     own = totals_all["likes"] + totals_all["comments"] + (
         (totals_all["shares"] + totals_all["saves"]) * n / cov if cov else 0)
-    st_r = sum((r.get("insights") or {}).get("total_interactions")
-               or ((r.get("insights") or {}).get("replies") or 0) + ((r.get("insights") or {}).get("shares") or 0)
-               for r in story_list)
-    tg_r = sum((m.get("like_count") or 0) + (m.get("comments_count") or 0) for m in tagged)
-    items = n + len(story_list) + len(tagged)
-    totals_all.update({
-        "stories": len(story_list), "story_reactions": st_r,
-        "tagged": len(tagged), "tagged_reactions": tg_r,
-        "avg_reaction": round((own + st_r + tg_r) / items, 2) if items else None,
-    })
+    totals_all["avg_reaction"] = round(own / n, 2) if n else None
 
     # Hourly snapshot of the headline numbers; the page diffs against ~24h ago.
     snap = {"t": now, "followers": prof.get("followers_count"), "follows": prof.get("follows_count"),
@@ -549,7 +513,6 @@ def instagram(page_id, tok):
         "runs": runs,
         "follower_history": hist,
         "posts": posts,
-        "stories": story_list,
         "tagged": [{
             "id": m["id"], "owner": m.get("username", ""), "text": m.get("caption", ""),
             "time": m.get("timestamp"), "url": m.get("permalink"), "type": m.get("media_type"),
