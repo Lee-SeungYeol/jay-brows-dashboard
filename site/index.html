@@ -13,7 +13,7 @@ main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
 header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
 h1{font-size:22px;margin:0}
 .muted{color:var(--muted);font-size:13px}
-.tabs{display:flex;gap:8px;margin:18px 0}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
 .tabs button{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 14px;border-radius:999px;font:inherit;cursor:pointer}
 .tabs button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
@@ -60,7 +60,12 @@ td.t{color:var(--muted);white-space:nowrap;font-size:12px}
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = n => n == null ? "–" : Number(n).toLocaleString("ko-KR");
 const when = t => t ? new Date(t).toLocaleString("ko-KR", {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) : "";
-let data, tab = "instagram";
+let data, tab = "instagram", sub = "FEED";
+const SUBS = [["FEED", "게시물"], ["REELS", "릴스"], ["STORY", "스토리"], ["TAGGED", "태그·협업"]];
+const LABELS = {reach: "도달", views: "조회", saved: "저장", shares: "공유", replies: "답장",
+  total_interactions: "총 반응", profile_visits: "프로필 방문", follows: "팔로우"};
+const ins = p => p.insights ? Object.entries(LABELS).filter(([k]) => p.insights[k] != null)
+  .map(([k, l]) => `<span>${l} ${num(p.insights[k])}</span>`).join("") : "";
 
 function stat(label, v) { return `<div class="card stat"><b>${num(v)}</b><span>${label}</span></div>`; }
 
@@ -71,21 +76,26 @@ const card = (p, extra = "") => `
       <div class="body">
         <span class="muted">${extra}${when(p.time)}</span>
         <p>${esc(p.text) || "<span class='muted'>(내용 없음)</span>"}</p>
-        <div class="nums"><span>♥ ${num(p.likes)}</span><span>💬 ${num(p.comments_count)}</span>${p.shares != null ? `<span>↗ ${num(p.shares)}</span>` : ""}</div>
+        <div class="nums">${p.likes != null ? `<span>♥ ${num(p.likes)}</span>` : ""}${p.comments_count != null ? `<span>💬 ${num(p.comments_count)}</span>` : ""}${typeof p.shares === "number" ? `<span>↗ ${num(p.shares)}</span>` : ""}${ins(p)}</div>
         ${(p.comments || []).length ? `<details><summary>댓글 보기 (${p.comments.length})</summary>${p.comments.map(c => `<div class="cmt"><b>${who(c)}</b> ${esc(c.text)}</div>`).join("")}</details>` : ""}
         <a href="${esc(p.url)}" target="_blank" rel="noopener">원문 보기 →</a>
       </div>
     </div>`;
 
 function render() {
-  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.k === tab));
+  document.querySelectorAll(".tabs button[data-k]").forEach(b => b.classList.toggle("on", b.dataset.k === tab));
   document.documentElement.style.setProperty("--accent", tab === "instagram" ? "var(--ig)" : "var(--fb)");
   const d = data[tab], v = document.getElementById("view");
   if (!d) { v.innerHTML = `<div class="card empty">아직 데이터가 없습니다. 토큰 연결 후 표시됩니다.</div>`; return; }
-  const posts = d.posts || [];
+  const isIG = tab === "instagram";
+  const all_posts = d.posts || [];
+  const posts = isIG ? all_posts.filter(p => p.kind === "FEED") : all_posts;
   const likes = posts.reduce((a, p) => a + (p.likes || 0), 0);
   const cmts = posts.reduce((a, p) => a + (p.comments_count || 0), 0);
-  let h = `<div class="grid">` +
+  const t = d.today || {};
+  let h = (isIG ? `<div class="grid">` + stat("오늘 도달", t.reach) + stat("오늘 조회", t.views) +
+      stat("오늘 프로필 방문", t.profile_views) + stat("오늘 반응 계정", t.accounts_engaged) + `</div>` : "") +
+    `<div class="grid">` +
     (tab === "instagram"
       ? stat("팔로워", d.followers) + stat("팔로잉", d.follows) + stat("게시물", d.media_count)
       : stat("팔로워", d.followers) + stat("페이지 좋아요", d.fans)) +
@@ -100,28 +110,42 @@ function render() {
       `</div></div>`;
   }
 
-  const all = posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
+  const all = all_posts.flatMap(p => (p.comments || []).map(c => ({...c, post: p})))
     .sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 100);
   h += `<h2>최근 댓글 (${all.length})</h2><div class="card">` + (all.length
     ? `<table>${all.map(c => `<tr><td class="u">${who(c)}</td><td>${esc(c.text)}</td><td class="t"><a href="${esc(c.post.url)}" target="_blank" rel="noopener">${when(c.time)}</a></td></tr>`).join("")}</table>`
     : `<div class="empty">댓글이 없습니다.</div>`) + `</div>`;
 
-  h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
-  if (d.tagged && d.tagged.length)
-    h += `<h2>태그·협업 게시물 (${d.tagged.length})</h2><div class="posts">` +
-      d.tagged.map(p => card(p, `@${esc(p.owner)} · `)).join("") + `</div>`;
+  if (isIG) {
+    const lists = {FEED: posts, REELS: all_posts.filter(p => p.kind === "REELS"), STORY: d.stories || [], TAGGED: d.tagged || []};
+    h += `<div class="tabs sub">` + SUBS.map(([k, l]) =>
+      `<button data-s="${k}" class="${k === sub ? "on" : ""}">${l} (${lists[k].length})</button>`).join("") + `</div>`;
+    const list = lists[sub];
+    h += sub === "STORY" ? `<p class="muted">스토리는 24시간 뒤 사라지므로 대시보드가 수집을 시작한 뒤의 스토리만 쌓입니다. 하이라이트는 Meta API에서 제공하지 않습니다.</p>` : "";
+    h += `<div class="posts">` + (list.length ? list.map(p => card(p,
+      (sub === "TAGGED" ? `@${esc(p.owner)} · ` : "") + (p.live ? "🔴 게시 중 · " : ""))).join("")
+      : `<div class="card empty">아직 없습니다.</div>`) + `</div>`;
+  } else {
+    h += `<h2>게시물</h2><div class="posts">` + posts.map(p => card(p)).join("") + `</div>`;
+  }
   v.innerHTML = h;
 }
 
-document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { tab = b.dataset.k; render(); });
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-k],button[data-s]");
+  if (!b) return;
+  if (b.dataset.k) tab = b.dataset.k; else sub = b.dataset.s;
+  render();
+});
 
-fetch("data.json?" + Date.now()).then(r => r.json()).then(j => {
+const load = () => fetch("data.json?" + Date.now()).then(r => r.json()).then(j => {
   data = j;
   document.getElementById("updated").textContent = "업데이트: " + new Date(j.updated).toLocaleString("ko-KR");
-  if (j.errors && j.errors.length)
-    document.getElementById("errors").innerHTML = `<div class="warn">일부 데이터를 가져오지 못했습니다<ul>${j.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>`;
+  document.getElementById("errors").innerHTML = !(j.errors && j.errors.length) ? "" : `<div class="warn">일부 데이터를 가져오지 못했습니다<ul>${j.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>`;
   render();
 }).catch(() => { document.getElementById("view").innerHTML = `<div class="card empty">data.json을 불러오지 못했습니다.</div>`; });
+load();
+setInterval(load, 60000);  // 1분마다 새 데이터 확인
 </script>
 </body>
 </html>

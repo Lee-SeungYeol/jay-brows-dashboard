@@ -8,13 +8,13 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-deploy:
@@ -24,6 +24,12 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Load history (data branch)
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: data
+          path: store
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -32,6 +38,19 @@ jobs:
           META_TOKEN: ${{ secrets.META_TOKEN }}
           PAGE_ID: ${{ vars.PAGE_ID }}
         run: python fetch.py
+      - name: Save history (data branch)
+        run: |
+          mkdir -p store site/raw && cp store/*.json site/raw/ 2>/dev/null || true
+          cd store
+          if [ ! -d .git ]; then
+            git init -q -b data
+            git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          fi
+          git config user.name "dashboard-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "data $(date -u +%FT%TZ)" || exit 0
+          git push -q origin HEAD:data
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

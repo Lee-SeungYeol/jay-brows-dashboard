@@ -131,6 +131,65 @@ def facebook(page_id, tok):
     }
 
 
+STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "store")
+ROTATE = int(os.environ.get("ROTATE", "25"))  # older posts refreshed in full per run
+
+POST_METRICS = {
+    "REELS": "reach,saved,shares,views,total_interactions,likes,comments,ig_reels_avg_watch_time,ig_reels_video_view_total_time",
+    "FEED": "reach,saved,shares,views,total_interactions,likes,comments,profile_visits,follows",
+    "STORY": "reach,replies,shares,views,total_interactions,follows,profile_visits,navigation",
+}
+
+
+def load(name, default):
+    try:
+        with open(os.path.join(STORE, name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def save(name, obj):
+    os.makedirs(STORE, exist_ok=True)
+    with open(os.path.join(STORE, name), "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+
+
+def insights(media_id, kind, tok):
+    """Per-media insights; metrics a media type doesn't support are dropped and retried."""
+    metrics = POST_METRICS[kind].split(",")
+    for _ in range(len(metrics)):
+        try:
+            rows = get(f"{media_id}/insights", tok, metric=",".join(metrics)).get("data", [])
+            out = {}
+            for r in rows:
+                v = r.get("total_value", {}).get("value") if "total_value" in r else (r.get("values") or [{}])[0].get("value")
+                out[r["name"]] = v
+            return out
+        except RuntimeError as e:
+            bad = next((m for m in metrics if m in str(e)), None)
+            if not bad:
+                return {}
+            metrics.remove(bad)
+    return {}
+
+
+def ig_media_row(m):
+    kind = "REELS" if m.get("media_product_type") == "REELS" else "FEED"
+    return {
+        "id": m["id"],
+        "kind": kind,
+        "type": m.get("media_type"),
+        "text": m.get("caption", ""),
+        "time": m.get("timestamp"),
+        "url": m.get("permalink"),
+        "image": m.get("thumbnail_url") or m.get("media_url"),
+        "likes": m.get("like_count", 0),
+        "comments_count": m.get("comments_count", 0),
+        "collab": bool(m.get("collaborators")) if "collaborators" in m else None,
+    }
+
+
 def instagram(page_id, tok):
     ig_ref = get(page_id, tok, fields="instagram_business_account").get("instagram_business_account")
     if not ig_ref:
@@ -138,34 +197,81 @@ def instagram(page_id, tok):
         return None
     ig_id = ig_ref["id"]
     prof = get(ig_id, tok, fields="username,name,followers_count,follows_count,media_count,profile_picture_url")
-    media = soft(lambda: get(
-        f"{ig_id}/media", tok, limit=POST_LIMIT,
-        fields="id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
-    ).get("data", []), [])
-    out = []
-    for m in media:
-        comments = []
-        if m.get("comments_count"):
-            comments = soft(lambda: ig_comments(m["id"], tok), [])
-        out.append({
-            "id": m["id"],
-            "text": m.get("caption", ""),
-            "time": m.get("timestamp"),
-            "url": m.get("permalink"),
-            "image": m.get("thumbnail_url") or m.get("media_url"),
-            "type": m.get("media_type"),
-            "likes": m.get("like_count", 0),
-            "comments_count": m.get("comments_count", 0),
-            "comments": comments,
+
+    # Every post we own (feed, carousel, reels); counts refresh every run.
+    fields = ("id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,"
+              "timestamp,like_count,comments_count")
+    media = soft(lambda: paged(f"{ig_id}/media", tok, 10000, limit=100, fields=fields), [])
+    posts = [ig_media_row(m) for m in media]
+
+    # Comments + insights: latest POST_LIMIT every run, plus a rotating slice of older posts.
+    detail = load("ig_detail.json", {})
+    cursor = load("ig_cursor.json", 0)
+    older = posts[POST_LIMIT:]
+    if older:
+        cursor %= len(older)
+    targets = posts[:POST_LIMIT] + older[cursor:cursor + ROTATE]
+    save("ig_cursor.json", cursor + ROTATE)
+    now = datetime.now(timezone.utc).isoformat()
+    for p in targets:
+        d = {"insights": insights(p["id"], p["kind"], tok), "checked": now}
+        d["comments"] = soft(lambda: ig_comments(p["id"], tok), []) if p["comments_count"] else []
+        detail[p["id"]] = d
+    for p in posts:
+        p.update(detail.get(p["id"], {}))
+    save("ig_detail.json", detail)
+
+    # Stories vanish after 24h, so keep every one we have seen.
+    stories = load("ig_stories.json", {})
+    live = soft(lambda: paged(f"{ig_id}/stories", tok, 200, limit=50,
+                              fields="id,media_type,media_url,thumbnail_url,permalink,timestamp,caption"), [])
+    live_ids = set()
+    for st in live:
+        live_ids.add(st["id"])
+        row = stories.get(st["id"], {})
+        row.update({
+            "id": st["id"], "type": st.get("media_type"), "time": st.get("timestamp"),
+            "url": st.get("permalink"), "image": st.get("thumbnail_url") or st.get("media_url"),
+            "text": st.get("caption", ""),
         })
-    # Posts other accounts tagged us in (includes most collab posts we don't own).
+        ins = insights(st["id"], "STORY", tok)
+        if ins:
+            row["insights"] = ins  # last values seen before it expired
+        row["checked"] = now
+        stories[st["id"]] = row
+    save("ig_stories.json", stories)
+    story_list = sorted(stories.values(), key=lambda r: r.get("time") or "", reverse=True)
+    for r in story_list:
+        r["live"] = r["id"] in live_ids
+
+    # Posts other accounts tagged us in (most collab posts we don't own show up here).
     tagged = soft(lambda: paged(
-        f"{ig_id}/tags", tok, POST_LIMIT, limit=POST_LIMIT,
-        fields="id,username,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
+        f"{ig_id}/tags", tok, 100, limit=10,
+        fields="id,username,caption,media_type,permalink,timestamp,like_count,comments_count",
     ), [])
+
+    # Account-level insights.
     reach = soft(lambda: get(f"{ig_id}/insights", tok, metric="reach", period="day").get("data", []), [])
     daily_reach = [{"date": v["end_time"][:10], "value": v["value"]}
                    for d in reach for v in d.get("values", [])]
+    totals = {}
+    for metric in ("reach", "views", "profile_views", "accounts_engaged", "total_interactions",
+                   "likes", "comments", "shares", "saves", "replies", "follows_and_unfollows",
+                   "website_clicks", "profile_links_taps"):
+        r = soft(lambda: get(f"{ig_id}/insights", tok, metric=metric, period="day",
+                             metric_type="total_value").get("data", []), [])
+        if r:
+            totals[metric] = r[0].get("total_value", {}).get("value")
+    errors[:] = [e for e in errors if "/insights" not in e]  # unsupported metrics are expected
+
+    # Follower history, one point per hour.
+    hist = load("ig_followers.json", [])
+    hour = now[:13]
+    if not hist or hist[-1]["t"][:13] != hour:
+        hist.append({"t": now, "followers": prof.get("followers_count"),
+                     "follows": prof.get("follows_count"), "media": prof.get("media_count")})
+    save("ig_followers.json", hist)
+
     return {
         "username": prof.get("username"),
         "name": prof.get("name"),
@@ -174,17 +280,14 @@ def instagram(page_id, tok):
         "follows": prof.get("follows_count"),
         "media_count": prof.get("media_count"),
         "daily_reach": daily_reach,
-        "posts": out,
+        "today": totals,
+        "follower_history": hist,
+        "posts": posts,
+        "stories": story_list,
         "tagged": [{
-            "id": m["id"],
-            "owner": m.get("username", ""),
-            "text": m.get("caption", ""),
-            "time": m.get("timestamp"),
-            "url": m.get("permalink"),
-            "image": m.get("thumbnail_url") or m.get("media_url"),
-            "type": m.get("media_type"),
-            "likes": m.get("like_count", 0),
-            "comments_count": m.get("comments_count", 0),
+            "id": m["id"], "owner": m.get("username", ""), "text": m.get("caption", ""),
+            "time": m.get("timestamp"), "url": m.get("permalink"), "type": m.get("media_type"),
+            "likes": m.get("like_count", 0), "comments_count": m.get("comments_count", 0),
         } for m in tagged],
     }
 
