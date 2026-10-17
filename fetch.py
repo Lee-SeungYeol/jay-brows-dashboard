@@ -278,12 +278,6 @@ def facebook(page_id, tok):
         "reactions_by_type": by_type if any(p["reactions_by_type"] for p in posts) else None,
         "insights_coverage": len(with_ins),
     }
-    # 게시물당 평균 반응 over ALL posts+reels. Shares/saves are averaged over the posts
-    # whose insights we have (all of them once the rotation has covered every post).
-    n, cov = totals_all["posts"], totals_all["insights_coverage"]
-    totals_all["avg_reaction"] = round(
-        (totals_all["likes"] + totals_all["comments"]) / n
-        + ((totals_all["shares"] + totals_all["saves"]) / cov if cov else 0), 2) if n else None
     for m in ("post_impressions_unique", "post_impressions", "post_clicks", "post_media_view",
               "post_total_media_view_unique", "post_video_views"):
         vals = [p["insights"][m] for p in with_ins if isinstance(p["insights"].get(m), (int, float))]
@@ -477,6 +471,24 @@ def instagram(page_id, tok):
         "saves": sum(p["insights"].get("saved") or 0 for p in with_ins),
         "insights_coverage": len(with_ins),
     }
+    # 게시물당 평균 반응 = every reaction we can see ÷ every item, across
+    #   own posts+reels (likes+comments+shares+saves),
+    #   stories (total_interactions, else replies+shares), and
+    #   posts others tagged/collabed us in (likes+comments).
+    # Own shares/saves are scaled up from the posts whose insights we have until every post is covered.
+    n, cov = totals_all["posts"], totals_all["insights_coverage"]
+    own = totals_all["likes"] + totals_all["comments"] + (
+        (totals_all["shares"] + totals_all["saves"]) * n / cov if cov else 0)
+    st_r = sum((r.get("insights") or {}).get("total_interactions")
+               or ((r.get("insights") or {}).get("replies") or 0) + ((r.get("insights") or {}).get("shares") or 0)
+               for r in story_list)
+    tg_r = sum((m.get("like_count") or 0) + (m.get("comments_count") or 0) for m in tagged)
+    items = n + len(story_list) + len(tagged)
+    totals_all.update({
+        "stories": len(story_list), "story_reactions": st_r,
+        "tagged": len(tagged), "tagged_reactions": tg_r,
+        "avg_reaction": round((own + st_r + tg_r) / items, 2) if items else None,
+    })
 
     # Hourly snapshot of the headline numbers; the page diffs against ~24h ago.
     snap = {"t": now, "followers": prof.get("followers_count"), "follows": prof.get("follows_count"),
