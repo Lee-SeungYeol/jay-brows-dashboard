@@ -186,8 +186,7 @@ FB_POST_METRICS = {
 }
 FB_PAGE_METRICS = ("page_impressions_unique,page_post_engagements,page_views_total,page_fan_adds,"
                    "page_follows,page_daily_follows_unique,page_media_view,page_total_media_view_unique")
-FB_COMMENT_CAP = int(os.environ.get("COMMENT_CAP", "20"))  # comment-thread reads per run, at most
-COMMENT_TTL = 3600  # latest posts: re-read comments when the count changes, else hourly
+FB_COMMENT_TTL = 3600  # latest posts: re-read comments when the count changes, else hourly
 
 
 def fb_parse(rows):
@@ -1098,6 +1097,8 @@ def main():
                     attempted.append(data["facebook"])
                     if data["facebook"]:
                         save("fb_last.json", data["facebook"])
+                    else:  # FB part failed on its own: keep showing the previous one
+                        data["facebook"] = load("fb_last.json", None)
                 else:
                     data["facebook"] = load("fb_last.json", None)  # refreshed every SLOW_SEC
         except Exception as e:
