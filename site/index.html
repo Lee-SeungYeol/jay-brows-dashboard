@@ -35,6 +35,8 @@ h1{font-size:22px;margin:0}
 h2{font-size:17px;margin:28px 0 10px}
 .warn{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:12px 14px;margin-top:16px;font-size:14px}
 .warn ul{margin:6px 0 0;padding-left:18px}
+.stale{background:#b91c1c;color:#fff;border-radius:12px;padding:12px 14px;margin-top:16px;font-size:15px;font-weight:600;line-height:1.5}
+.stale small{display:block;font-weight:400;opacity:.9;margin-top:2px}
 .posts{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .post{display:flex;flex-direction:column;overflow:hidden;padding:0}
 .post img{width:100%;aspect-ratio:1;object-fit:cover;background:var(--line)}
@@ -228,6 +230,7 @@ body.lock{overflow:hidden}
     <button data-k="instagram" class="on">인스타그램</button>
     <button data-k="facebook">페이스북</button>
   </div>
+  <div id="stale" role="alert"></div>
   <div id="errors"></div>
   <div id="view"></div>
 </main>
@@ -813,7 +816,13 @@ document.addEventListener("keydown", e => {
 const load = () => fetch("data.json?" + Date.now()).then(r => r.json()).then(j => {
   data = j;
   document.getElementById("updated").textContent = "업데이트: " + new Date(j.updated).toLocaleString("ko-KR");
-  document.getElementById("errors").innerHTML = !(j.errors && j.errors.length) ? "" : `<div class="warn">일부 데이터를 가져오지 못했습니다<ul>${j.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>`;
+  const h = j.health || {}, staleT = j.stale_since || (h.ok === false ? (h.stale_since || j.updated) : null);
+  const reasonKo = {blocked: "Meta API 접근 차단 – Meta 개발자 계정 확인 필요", rate: "Meta API 호출 한도 초과 – 잠시 후 자동으로 다시 시도해요",
+    token: "Meta 액세스 토큰 만료/무효 – 토큰 재발급 필요", token_missing: "META_TOKEN 시크릿이 설정되지 않았어요"}[h.last_error_kind] || h.reason || "Meta API에서 데이터를 받지 못했어요";
+  const retryMin = h.next_run_at ? Math.max(0, Math.round((h.next_run_at * 1000 - Date.now()) / 60000)) : null;
+  document.getElementById("stale").innerHTML = !staleT ? "" : `<div class="stale">⚠️ ${esc(new Date(staleT).toLocaleString("ko-KR"))}부터 데이터 업데이트가 멈췄어요: ${esc(reasonKo)}` +
+    `<small>아래 숫자는 마지막으로 정상 수집된 데이터예요.${h.consecutive_failures ? ` 연속 실패 ${h.consecutive_failures}회` : ""}${retryMin != null ? ` · 다음 재시도 약 ${retryMin}분 후` : ""}</small></div>`;
+  document.getElementById("errors").innerHTML = staleT || !(j.errors && j.errors.length) ? "" : `<div class="warn">일부 데이터를 가져오지 못했습니다<ul>${j.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>`;
   render();
 }).catch(() => { document.getElementById("view").innerHTML = `<div class="card empty">data.json을 불러오지 못했습니다.</div>`; });
 load();

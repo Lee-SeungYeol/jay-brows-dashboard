@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"   # 5분마다 (GitHub 최소 간격)
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignore the API back-off and fetch now"
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -13,17 +18,24 @@ permissions:
   pages: write
   id-token: write
 
+# Renamed from "pages": run 39497201431 is stuck forever in "waiting" on the github-pages
+# environment (can't be cancelled) and holds that group, so every run in it stayed pending.
 concurrency:
-  group: pages
+  group: update-v2
   cancel-in-progress: false
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 80
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # The job's own start time (github.run_started_at is not a real context property: it
+      # expanded to "" and `date -d ""` is today's midnight, so the chain never slept).
+      - name: Record job start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - name: Load history (data branch)
         uses: actions/checkout@v4
@@ -35,13 +47,19 @@ jobs:
         with:
           python-version: "3.12"
       - name: Fetch Meta data
+        id: fetch
         env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '' }}
           META_TOKEN: ${{ secrets.META_TOKEN }}
           PAGE_ID: ${{ vars.PAGE_ID }}
         run: python fetch.py
       - name: Save history (data branch)
+        if: steps.fetch.outputs.skipped != 'true'
         run: |
-          mkdir -p store site/raw && cp store/*.json site/raw/ 2>/dev/null || true
+          mkdir -p store site/raw
+          for f in store/*.json; do
+            case "$f" in */last_good_data.json) ;; *) cp "$f" site/raw/ ;; esac
+          done 2>/dev/null || true
           cd store
           if [ ! -d .git ]; then
             git init -q -b data
@@ -53,10 +71,13 @@ jobs:
           git commit -qm "data $(date -u +%FT%TZ)" || exit 0
           git push -q origin HEAD:data
       - uses: actions/configure-pages@v5
+        if: steps.fetch.outputs.skipped != 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.fetch.outputs.skipped != 'true'
         with:
           path: site
       - id: deploy
+        if: steps.fetch.outputs.skipped != 'true'
         uses: actions/deploy-pages@v4
       # GitHub's cron is unreliable (often skipped or delayed), so each run queues the next one.
       # Cron above stays as a backup in case the chain ever breaks.
@@ -65,11 +86,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Start the next run 3 minutes after this one started.
-          started=$(date -d "${{ github.run_started_at }}" +%s)
-          wait=$(( 180 - ($(date +%s) - started) ))
+          now=$(date +%s)
+          start=${JOB_START:-$now}
+          # Earliest next start: 180 s after THIS job started, or later while fetch.py is backing off
+          # (store/health.json next_run_at: 3 -> 6 -> 12 ... -> 60 min after consecutive API-wide errors).
+          next=$(python3 -c 'import json;print(int(json.load(open("store/health.json")).get("next_run_at",0)))' 2>/dev/null || echo 0)
+          target=$(( start + 180 ))
+          if [ "$next" -gt "$target" ]; then target=$next; fi
+          if [ "$target" -gt $(( now + 3600 )) ]; then target=$(( now + 3600 )); fi
+          wait=$(( target - now ))
+          echo "sleeping ${wait}s (job start $start, next_run_at $next)"
           if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
-          # Only one chain: skip if another run is already queued or running.
-          busy=$(gh run list -R "${{ github.repository }}" --workflow update.yml --json status,databaseId \
-            -q '[.[] | select((.status=="queued" or .status=="in_progress" or .status=="waiting") and .databaseId != ${{ github.run_id }})] | length')
-          if [ "$busy" = "0" ]; then gh workflow run update.yml --ref main -R "${{ github.repository }}"; fi
+          # Only one chain: skip if another run is queued/in progress/waiting/pending. Runs created
+          # more than 30 min ago are ignored (a zombie "waiting" run must not stop the chain).
+          busy=$(gh run list -R "${{ github.repository }}" --workflow update.yml -L 50 --json status,databaseId,createdAt \
+            -q '[.[] | select((.status=="queued" or .status=="in_progress" or .status=="waiting" or .status=="pending" or .status=="requested")
+                             and .databaseId != ${{ github.run_id }}
+                             and ((.createdAt | fromdateiso8601) > (now - 1800)))] | length') || busy=error
+          if [ "$busy" = "0" ]; then
+            gh workflow run update.yml --ref main -R "${{ github.repository }}"
+          else
+            echo "not queuing (busy=$busy)"
+          fi
